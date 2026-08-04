@@ -1,0 +1,18 @@
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Flight data never belongs in the repo — it is gigabytes per flight.
+# See SPEC.md 2.5; the data root is C:\DroneData.
+flights/
+*.tif
+*.laz
+*.ply
+*.obj
+
+.vscode/
+.idea/
+*.log

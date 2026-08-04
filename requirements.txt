@@ -1,0 +1,12 @@
+# Sprint 1 needs nothing beyond the standard library and a test runner.
+# Sprint 2+ dependencies are added as each sprint lands, so a broken wheel
+# never blocks work that does not need it.
+
+pytest>=8.0
+
+# --- Sprint 2: MAVLink layer ---
+pymavlink>=2.4.49
+
+# --- Sprint 3: web UI / backend ---
+# fastapi>=0.115
+# uvicorn[standard]>=0.32

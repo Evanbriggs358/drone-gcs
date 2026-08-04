@@ -1,0 +1,10 @@
+[project]
+name = "drone-gcs"
+version = "0.1.0"
+description = "Ground control station for a 7-inch Deadcat autonomous mapping platform"
+requires-python = ">=3.12"
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+addopts = "-q"
