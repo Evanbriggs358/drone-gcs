@@ -4,8 +4,16 @@
 
 pytest>=8.0
 
-# --- Sprint 2: MAVLink layer ---
+# --- MAVLink layer ---
 pymavlink>=2.4.49
+
+# --- Companion: capture, geotagging, image validation ---
+piexif>=1.1.3
+pillow>=10.0
+
+# picamera2 is Raspberry Pi only and is installed on the Pi, not here.
+# The geotagging and validation code is deliberately hardware-independent so it
+# can be developed and tested on any machine.
 
 # --- Sprint 3: web UI / backend ---
 # fastapi>=0.115
