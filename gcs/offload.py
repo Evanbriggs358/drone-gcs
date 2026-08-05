@@ -134,6 +134,34 @@ class CompanionClient:
         request = urllib.request.Request(f"{self.base_url}/session/stop", method="POST")
         return self._read_json(request)
 
+    def preflight(self, mission_waypoints: int = 0, estimated_photos: int = 0) -> dict:
+        return self._get_json(
+            f"/preflight?mission_waypoints={mission_waypoints}"
+            f"&estimated_photos={estimated_photos}"
+        )
+
+    def upload_mission(
+        self,
+        waypoints: list[list[float]],
+        altitude_m: float,
+        trigger_distance_m: float,
+        home: list[float] | None = None,
+    ) -> dict:
+        """Ask the companion to write a mission to the flight controller."""
+        payload = json.dumps({
+            "waypoints": waypoints,
+            "altitude_m": altitude_m,
+            "trigger_distance_m": trigger_distance_m,
+            "home": home,
+        }).encode()
+        request = urllib.request.Request(
+            f"{self.base_url}/mission/upload",
+            data=payload,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        return self._read_json(request)
+
     # -- transfer ----------------------------------------------------------
 
     def download_session(

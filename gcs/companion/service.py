@@ -22,6 +22,7 @@ import os
 import shutil
 import threading
 import time
+from contextlib import contextmanager
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
@@ -71,6 +72,12 @@ class CaptureWorker:
         self._stop = threading.Event()
         self._lock = threading.Lock()
         self._link = None
+
+        # Only one thread may read the MAVLink connection at a time. The capture
+        # pump reads continuously; request-driven protocols like mission upload
+        # need exclusive access, or the pump consumes the MISSION_REQUEST
+        # messages they are waiting for and the transfer hangs until timeout.
+        self._io_lock = threading.Lock()
 
     # -- lifecycle ---------------------------------------------------------
 
@@ -130,9 +137,23 @@ class CaptureWorker:
                 # service must recover on its own; nobody can SSH in mid-flight.
                 self._stop.wait(3.0)
 
+    @contextmanager
+    def exclusive_link(self):
+        """Take sole use of the MAVLink connection for a request/response exchange.
+
+        The capture pump releases the lock between messages, so this is granted
+        within a message interval. Telemetry and capture pause meanwhile, which
+        is acceptable: these exchanges happen on the ground.
+        """
+        with self._io_lock:
+            if self._link is None or not self.link_status.connected:
+                raise RuntimeError("no link to the flight controller")
+            yield self._link
+
     def _pump(self) -> None:
         while not self._stop.is_set():
-            msg = self._link.recv_match(blocking=True, timeout=1.0)
+            with self._io_lock:
+                msg = self._link.recv_match(blocking=True, timeout=0.5)
             if msg is None:
                 continue
             if msg.get_srcSystem() != self._link.target_system:
@@ -169,6 +190,21 @@ class SessionRequest(BaseModel):
     #: Set to trigger from the companion by distance instead of waiting for the
     #: flight controller. Only for manually flown surveys.
     trigger_distance_m: float | None = None
+
+
+class MissionRequest(BaseModel):
+    """A planned survey, ready to be written to the flight controller.
+
+    The ground station plans; the companion uploads. Only the Pi has a wire to
+    the flight controller, so every command reaches it through here.
+    """
+
+    #: Survey waypoints as [latitude, longitude] pairs.
+    waypoints: list[tuple[float, float]]
+    altitude_m: float
+    #: Distance between shutter releases, from the planner rather than a guess.
+    trigger_distance_m: float
+    home: tuple[float, float] | None = None
 
 
 @app.get("/health")
@@ -236,6 +272,95 @@ def stop_session() -> dict:
         "name": session.directory.name,
         "captured": session.stats.captured,
         "failed": session.stats.failed,
+    }
+
+
+@app.get("/preflight")
+def preflight(mission_waypoints: int = 0, estimated_photos: int = 0) -> dict:
+    """Run the launch gate against live vehicle state and the Pi's own health."""
+    from ..link.preflight import run_preflight
+
+    usage = shutil.disk_usage(PHOTO_ROOT if PHOTO_ROOT.exists() else Path.home())
+    camera_ok = not isinstance(worker.camera, type(None))
+
+    report = run_preflight(
+        worker.vehicle,
+        mission_waypoint_count=mission_waypoints,
+        companion_ready=worker.link_status.connected,
+        companion_detail=(
+            "Flight controller link up"
+            if worker.link_status.connected
+            else f"No link to the flight controller: {worker.link_status.error or 'not connected'}"
+        ),
+        camera_ready=camera_ok,
+        camera_detail=f"{type(worker.camera).__name__} ready",
+        free_disk_gb=usage.free / 1024**3,
+        estimated_photos=estimated_photos,
+    )
+
+    return {
+        "ready_to_arm": report.ready_to_arm,
+        "summary": report.summary(),
+        "checks": [
+            {
+                "name": c.name,
+                "passed": c.passed,
+                "detail": c.detail,
+                "severity": c.severity.value,
+                "blocking": c.blocks_launch,
+            }
+            for c in report.checks
+        ],
+    }
+
+
+@app.post("/mission/upload")
+def upload_mission_endpoint(request: MissionRequest) -> dict:
+    """Build an AUTO mission from planned waypoints and write it to the FC.
+
+    Verified by reading it back; a rejected or mismatched upload raises rather
+    than reporting a success the aircraft would not honour.
+    """
+    from ..link.mission import build_mission, diff_missions, download_mission, upload_mission
+    from ..planning.grid import SurveyPlan, Waypoint
+
+    waypoints = [
+        Waypoint(lat=lat, lon=lon, alt_m=request.altitude_m)
+        for lat, lon in request.waypoints
+    ]
+    plan = SurveyPlan(
+        waypoints=waypoints,
+        photo_points=[],
+        line_count=len(waypoints) // 2,
+        path_length_m=0.0,
+        duration_s=0.0,
+        area_m2=0.0,
+        gsd_cm_per_px=0.0,
+        photo_spacing_m=request.trigger_distance_m,
+        line_spacing_m=0.0,
+    )
+
+    items = build_mission(
+        plan,
+        trigger_distance_m=request.trigger_distance_m,
+        home=tuple(request.home) if request.home else None,
+    )
+
+    try:
+        with worker.exclusive_link() as link:
+            upload_mission(link, items)
+            stored = download_mission(link)
+    except (RuntimeError, TimeoutError) as error:
+        raise HTTPException(502, f"upload failed: {error}")
+
+    problems = diff_missions(items, stored)
+    if problems:
+        raise HTTPException(502, "mission readback did not match: " + "; ".join(problems))
+
+    return {
+        "items": len(items),
+        "trigger_distance_m": request.trigger_distance_m,
+        "verified": True,
     }
 
 

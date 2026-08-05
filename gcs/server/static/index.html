@@ -86,6 +86,24 @@
     <h2>Result</h2>
     <div id="plan-stats" class="plan-stats muted">Draw an area to see the flight plan.</div>
     <div id="plan-warnings"></div>
+
+    <h2>Aircraft link</h2>
+    <div class="button-row">
+      <input type="text" id="in-companion" placeholder="http://raspberrypi.local:8001">
+    </div>
+    <div class="button-row" style="margin-top:6px">
+      <button id="btn-connect" class="secondary">Connect</button>
+      <button id="btn-disconnect" class="secondary">Disconnect</button>
+    </div>
+    <div id="link-status" class="link-status muted">Not connected.</div>
+
+    <div id="telemetry" class="telemetry hidden"></div>
+
+    <h2>Launch</h2>
+    <button id="btn-preflight" class="secondary full">Run pre&#8209;flight checks</button>
+    <div id="preflight" class="preflight"></div>
+    <button id="btn-upload" class="primary full" disabled>Upload mission</button>
+    <div id="upload-result"></div>
   </aside>
 
   <div id="map"></div>
@@ -130,6 +148,7 @@
 </div>
 
 <script src="/plan.js"></script>
+<script src="/fly.js"></script>
 <script type="module" src="/app.js"></script>
 </body>
 </html>

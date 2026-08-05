@@ -166,6 +166,101 @@ button.secondary:hover { border-color: var(--accent); }
 }
 #calibration-note { margin-top: 8px; }
 
+/* -- aircraft link and launch ------------------------------------------- */
+
+#in-companion {
+  width: 100%;
+  background: var(--panel-2);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  padding: 7px;
+  font: inherit;
+  font-size: 12.5px;
+}
+
+button.primary {
+  background: #16283c;
+  border: 1px solid var(--accent);
+  border-radius: 5px;
+  padding: 9px 12px;
+  color: var(--text);
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+}
+button.primary:hover:not([disabled]) { background: #1d3a4f; }
+button.primary[disabled] {
+  opacity: .4;
+  cursor: not-allowed;
+  border-color: var(--line);
+  background: var(--panel-2);
+}
+button.full { width: 100%; margin-top: 8px; }
+
+.link-status {
+  margin-top: 8px;
+  font-size: 12px;
+  line-height: 1.45;
+}
+.link-status.muted { color: var(--muted); }
+.link-status.good { color: var(--good); }
+.link-status.warn { color: var(--warn); }
+.link-status.bad { color: var(--bad); }
+
+.telemetry {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 5px;
+  margin-top: 10px;
+}
+.tele {
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 5px 8px;
+  font-size: 11px;
+}
+.tele span { display: block; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+.tele b { font-size: 13px; font-variant-numeric: tabular-nums; }
+
+.preflight { margin-top: 8px; }
+.preflight-summary {
+  margin: 0 0 8px;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+.preflight-summary.good { color: var(--good); }
+.preflight-summary.bad { color: var(--bad); }
+
+.check {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 5px 8px;
+  margin-bottom: 4px;
+  border-left: 3px solid var(--line);
+  background: var(--panel-2);
+  border-radius: 0 4px 4px 0;
+  font-size: 11.5px;
+}
+.check b { font-size: 12px; }
+.check span { color: var(--muted); line-height: 1.4; }
+.check.good { border-left-color: var(--good); }
+.check.warn { border-left-color: var(--warn); }
+.check.bad { border-left-color: var(--bad); }
+
+/* Live aircraft position. A triangle so heading is readable at a glance. */
+.aircraft {
+  width: 0;
+  height: 0;
+  border-left: 8px solid transparent;
+  border-right: 8px solid transparent;
+  border-bottom: 16px solid var(--good);
+  filter: drop-shadow(0 0 3px rgba(0, 0, 0, .8));
+}
+
 .detail-table { width: 100%; font-size: 12.5px; }
 .detail-table td { padding: 4px 0; border-bottom: 1px solid var(--line); }
 .detail-table td:first-child { color: var(--muted); }

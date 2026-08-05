@@ -210,6 +210,8 @@
       return;
     }
 
+    state.lastPlan = plan;
+    window.planner.lastPlan = plan;   // the fly panel uploads whatever is shown
     drawPlan(plan);
     showStats(plan);
   }
@@ -306,7 +308,7 @@
 
   redrawArea();
 
-  // Exposed for debugging from the browser console: inspect the map, the
-  // current survey vertices, and force a re-plan.
-  window.planner = { map, state, replan };
+  // The fly panel needs the map and the current plan; the rest is exposed for
+  // debugging from the browser console.
+  window.planner = { map, state, replan, lastPlan: null };
 })();

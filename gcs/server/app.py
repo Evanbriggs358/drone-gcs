@@ -28,6 +28,7 @@ from ..planning import (
     SurveyParams,
     plan_survey,
 )
+from ..offload import CompanionClient, CompanionError
 from ..processing.odm import find_products
 
 #: Root holding one folder per reconstruction. Override with DRONE_DATA_DIR.
@@ -275,6 +276,100 @@ def make_plan(request: PlanRequest) -> dict:
         },
         "warnings": plan.warnings,
     }
+
+
+# -- companion computer ----------------------------------------------------
+#
+# The laptop has no wire to the flight controller — only WiFi to the Pi. Every
+# command and every scrap of telemetry therefore travels through the companion,
+# and these endpoints are a thin proxy onto it. Keeping that boundary explicit
+# stops the ground station quietly assuming a link it does not have.
+
+_companion: dict[str, CompanionClient | None] = {"client": None}
+
+if os.environ.get("DRONE_COMPANION_URL"):
+    _companion["client"] = CompanionClient(os.environ["DRONE_COMPANION_URL"])
+
+
+class CompanionConnect(BaseModel):
+    url: str | None = None
+
+
+class MissionUpload(BaseModel):
+    waypoints: list[tuple[float, float]]
+    altitude_m: float
+    trigger_distance_m: float
+    home: tuple[float, float] | None = None
+
+
+def _require_companion() -> CompanionClient:
+    client = _companion["client"]
+    if client is None:
+        raise HTTPException(503, "not connected to the companion computer")
+    return client
+
+
+@app.post("/api/companion/connect")
+def companion_connect(request: CompanionConnect) -> dict:
+    """Attach to the Pi, by address or by looking for it on the network."""
+    client = CompanionClient(request.url) if request.url else CompanionClient.discover()
+    if client is None:
+        raise HTTPException(
+            404,
+            "Could not find the companion computer. Check the Pi is powered and "
+            "on the same network, or give its address directly.",
+        )
+    try:
+        health = client.health()
+    except CompanionError as error:
+        raise HTTPException(502, f"companion unreachable: {error}")
+
+    _companion["client"] = client
+    return {"url": client.base_url, "health": health}
+
+
+@app.post("/api/companion/disconnect")
+def companion_disconnect() -> dict:
+    _companion["client"] = None
+    return {"connected": False}
+
+
+@app.get("/api/companion/status")
+def companion_status() -> dict:
+    """Live vehicle state. Polled by the map; a dropout is expected, not fatal."""
+    client = _companion["client"]
+    if client is None:
+        return {"connected": False}
+    try:
+        status = client.status()
+    except CompanionError as error:
+        # A lost link is normal out at the far end of a survey. Report it
+        # plainly rather than raising; the aircraft is flying the mission itself.
+        return {"connected": False, "error": str(error), "url": client.base_url}
+    return {"connected": True, "url": client.base_url, **status}
+
+
+@app.get("/api/companion/preflight")
+def companion_preflight(mission_waypoints: int = 0, estimated_photos: int = 0) -> dict:
+    client = _require_companion()
+    try:
+        return client.preflight(mission_waypoints, estimated_photos)
+    except CompanionError as error:
+        raise HTTPException(502, str(error))
+
+
+@app.post("/api/companion/mission")
+def companion_mission(request: MissionUpload) -> dict:
+    client = _require_companion()
+    try:
+        return client.upload_mission(
+            [list(w) for w in request.waypoints],
+            request.altitude_m,
+            request.trigger_distance_m,
+            list(request.home) if request.home else None,
+        )
+    except CompanionError as error:
+        raise HTTPException(502, str(error))
 
 
 @app.get("/files/{project}/{path:path}")
