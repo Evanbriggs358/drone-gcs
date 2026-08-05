@@ -359,22 +359,31 @@ Confirmed necessary during SITL testing:
    confirm photos appear with sensible geotags.
 6. Only then install the systemd unit and fly.
 
-## Committed next: flight-log diagnostics (SPEC Phase E2)
+## Flight-log diagnostics ✅ **DONE** (SPEC Phase E2)
 
-Deferred behind the ground-station UI, but **agreed and not dropped**. This is the
-piece aimed at the reported position-hold drift, and it should exist before the
-first ArduPilot logs are generated so there is something to point at them.
-
-- Compass health against the World Magnetic Model
-- Motor-current correlation, to catch compass error that scales with throttle —
-  the signature of ESC interference
-- Vibration levels and EKF innovations against ArduPilot's thresholds
-- One-click log export prepared for the MAGFit web tool
+`gcs/diagnostics/logs.py` and `tools/analyse_log.py`. Reads an ArduPilot `.BIN`
+and reports vibration against ArduPilot's thresholds, compass field stability,
+motor-current interference, GPS quality, persistent attitude bias in hover, and
+whether the log can feed MAGFit.
 
 Worth restating plainly: **none of the ground-station software fixes flight
 stability.** Drift is a flight-controller and airframe problem. The firmware
 switch, a correctly mounted FC, and AutoTune are the fixes; this tooling only
 diagnoses and prevents flying into a known-bad state.
+
+## What is left
+
+Everything needed for a real mapping flight exists and is proven in simulation.
+Remaining work is either hardware-dependent or polish:
+
+- **Hardware bring-up** — the sequence below. Blocked on the aircraft.
+- **`PiCameraModule3` has never run.** Written against picamera2's documentation
+  and impossible to execute off a Pi.
+- **Measured capture duration** — needed to replace the guessed
+  `min_capture_interval_s` and make the speed limits real.
+- Starting a reconstruction from the browser rather than a command.
+- Saving and reloading named survey sites.
+- GPU-accelerated ODM, worth setting up once real surveys make the hours matter.
 
 ## Immediate next steps
 

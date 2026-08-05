@@ -13,21 +13,42 @@ Pi Camera Module 3 · Holybro M10 GPS · 6S / 7-inch platform
 
 ## Status
 
-Flight path proven in simulation. A generated survey grid uploads to ArduPilot and
-flies start to finish — takeoff, 16 survey waypoints, camera triggering on and off,
-return to launch, landing — with peak altitude and cruise speed matching the plan.
+Every stage works and is proven end to end in simulation: a survey is drawn on a
+map, uploaded to ArduPilot, flown start to finish, photographed and geotagged,
+offloaded, reconstructed, and viewed as an orthomosaic and 3D model.
 
 | Component | State |
 |---|---|
-| Survey planning — grids, GSD, spacing, estimates | ✅ Working |
-| Vehicle state and pre-flight gating | ✅ Working |
-| Mission build, upload, and verification | ✅ Working |
+| Survey planning — grids, GSD, spacing, endurance | ✅ Working |
+| Ground station UI — map, planning, pre-flight, live tracking | ✅ Working |
+| Mission build, upload, and readback verification | ✅ Working |
 | Flying a full mission (ArduPilot SITL) | ✅ Verified |
-| Camera capture and EXIF geotagging | 🔶 In progress |
-| Photogrammetry pipeline and 3D viewer | ⬜ Next |
-| Browser UI | ⬜ Planned |
+| Companion service — capture, geotagging, systemd | ✅ Verified in SITL |
+| Resumable photo offload | ✅ Verified |
+| Coverage-gap detection | ✅ Working |
+| Photogrammetry pipeline and 3D viewer | ✅ Verified on real imagery |
+| Flight-log diagnostics | ✅ Working |
+| Real aircraft | ⬜ Awaiting hardware |
 
-108 tests passing.
+265 tests passing.
+
+**The one piece never executed** is the Raspberry Pi camera driver, which cannot run
+off a Pi. See [PLAN.md](PLAN.md) for what else moves from simulator to aircraft, and
+what does not.
+
+### Proven in simulation
+
+A 200 m survey planned, uploaded, flown, and captured:
+
+```
+Captured 151 photos (0 failed) from 151 triggers
+Geotagged: 151/151      Heading: 151/151
+Altitude:  644.1 m      (584 m home + 60 m survey altitude)
+Spacing:   median 13.8 m   (planner asked for 13.8 m)
+```
+
+Offloaded, then deliberately corrupted and re-run: 3 re-fetched, 148 skipped,
+0.1 MB transferred instead of 7.5 MB, all 151 revalidating clean afterwards.
 
 ## Design decisions worth knowing
 
@@ -55,6 +76,16 @@ goal.
 implementation rather than Shapely, so the foundation cannot be blocked by package
 availability.
 
+**Endurance is modelled, not assumed.** Flying faster does not simply cost flight
+time on a multirotor: most power goes into staying up, and forward flight gives the
+rotors cleaner air, so endurance *rises* with speed before drag overwhelms it. The
+planner computes that curve and recommends the speed covering the most ground per
+battery. One timed hover calibrates the model to measured reality.
+
+**Coverage gaps are found before you leave the site.** Every survey has a thin
+perimeter, so only under-covered ground *surrounded by good coverage* is reported —
+including ground photographed zero times, which is the case that matters most.
+
 ## Documentation
 
 - **[SPEC.md](SPEC.md)** — what the system does, architecture, and the reasoning
@@ -70,31 +101,58 @@ py -3.14 -m venv .venv
 .venv\Scripts\python.exe -m pytest
 ```
 
+## Run the ground station
+
+```
+.venv\Scripts\python.exe -m gcs.server
+```
+
+Opens at http://127.0.0.1:8000 — draw a survey, watch the plan update as you move a
+slider, connect to the aircraft, run the checklist, and upload.
+
 ## Try it without hardware
 
-Survey plans for a sample area, and the largest area one battery covers:
+Planning and endurance, no simulator needed:
 
 ```
 .venv\Scripts\python.exe tools\preview_plan.py
+.venv\Scripts\python.exe tools\power_curve.py --hover-min 18
 .venv\Scripts\python.exe tools\battery_budget.py
 ```
 
 Against a simulated aircraft — start Mission Planner's **Simulation → Multirotor**,
-then:
+or run `ArduCopter.exe` directly with `tools/sitl_keepalive.py` holding port 5760:
 
 ```
-.venv\Scripts\python.exe tools\sitl_probe.py     # live telemetry and pre-flight check
+.venv\Scripts\python.exe tools\sitl_probe.py     # telemetry and pre-flight check
 .venv\Scripts\python.exe tools\sitl_upload.py    # plan, upload, verify
 .venv\Scripts\python.exe tools\sitl_fly.py       # fly the whole survey
+.venv\Scripts\python.exe tools\sitl_capture.py   # fly it and capture photos
+```
+
+After a flight:
+
+```
+.venv\Scripts\python.exe tools\offload.py --list
+.venv\Scripts\python.exe tools\inspect_photos.py <folder>\images
+.venv\Scripts\python.exe tools\check_coverage.py <folder>
+.venv\Scripts\python.exe tools\analyse_log.py <log>.BIN
 ```
 
 ## Layout
 
 ```
-gcs/planning/    survey geometry — camera model, projection, grid generation
-gcs/link/        MAVLink — vehicle state, pre-flight gating, mission upload
-tools/           developer utilities and simulator drivers
-tests/           test suite
+gcs/planning/     survey geometry, camera model, endurance
+gcs/link/         MAVLink — vehicle state, pre-flight gating, missions
+gcs/companion/    Raspberry Pi service — capture, geotagging, HTTP API
+gcs/processing/   OpenDroneMap orchestration
+gcs/diagnostics/  flight-log analysis
+gcs/server/       ground station web app
+gcs/coverage.py   coverage-gap detection
+gcs/offload.py    resumable photo transfer
+deploy/           systemd unit for the Pi
+tools/            command-line utilities and simulator drivers
+tests/            test suite
 ```
 
 Flight imagery and photogrammetry outputs live outside the repository — they run to
