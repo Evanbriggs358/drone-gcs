@@ -69,6 +69,20 @@
       </select>
     </label>
 
+    <h2>Aircraft</h2>
+    <label>All&#8209;up weight
+      <span class="value-out" id="out-weight">1.60 kg</span>
+      <input type="range" id="in-weight" min="0.8" max="3.0" step="0.05" value="1.6">
+    </label>
+    <label class="select-label">Measured hover time
+      <input type="number" id="in-hover" min="1" max="60" step="0.5"
+             placeholder="minutes — leave blank to estimate">
+    </label>
+    <p id="calibration-note" class="hint-block">
+      Endurance is estimated from component figures. Fly a timed hover at real
+      weight and enter it here to replace the estimate with measurement.
+    </p>
+
     <h2>Result</h2>
     <div id="plan-stats" class="plan-stats muted">Draw an area to see the flight plan.</div>
     <div id="plan-warnings"></div>

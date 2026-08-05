@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import os
 import statistics
+from dataclasses import replace
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
@@ -18,7 +19,15 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from ..planning import CAMERAS, PI_CAMERA_MODULE_3, Pattern, SurveyParams, plan_survey
+from ..planning import (
+    CAMERAS,
+    DEADCAT_7IN,
+    PI_CAMERA_MODULE_3,
+    Battery,
+    Pattern,
+    SurveyParams,
+    plan_survey,
+)
 from ..processing.odm import find_products
 
 #: Root holding one folder per reconstruction. Override with DRONE_DATA_DIR.
@@ -180,6 +189,15 @@ class PlanRequest(BaseModel):
     pattern: str = "nadir"
     camera: str | None = None
 
+    # -- aircraft, for endurance analysis --
+    all_up_weight_kg: float = Field(default=1.6, gt=0.2, le=25)
+    battery_capacity_mah: float = Field(default=5000, gt=0)
+    battery_cells: int = Field(default=6, ge=1, le=14)
+    #: A timed hover at real all-up weight. Scales the endurance model to
+    #: measured reality; without it the numbers are estimates from component
+    #: figures and carry real uncertainty.
+    measured_hover_min: float | None = Field(default=None, gt=0, le=120)
+
 
 @app.get("/api/cameras")
 def list_cameras() -> list[dict]:
@@ -217,8 +235,21 @@ def make_plan(request: PlanRequest) -> dict:
         pattern=pattern,
     )
 
+    airframe = replace(DEADCAT_7IN, all_up_weight_kg=request.all_up_weight_kg)
+    battery = Battery(
+        capacity_mah=request.battery_capacity_mah, cells=request.battery_cells
+    )
+    if request.measured_hover_min:
+        airframe = airframe.calibrated_to(request.measured_hover_min, battery)
+
     try:
-        plan = plan_survey([tuple(p) for p in request.polygon], camera, params)
+        plan = plan_survey(
+            [tuple(p) for p in request.polygon],
+            camera,
+            params,
+            airframe=airframe,
+            battery=battery,
+        )
     except ValueError as error:
         raise HTTPException(400, str(error))
 
@@ -237,6 +268,10 @@ def make_plan(request: PlanRequest) -> dict:
             "max_ground_speed_ms": round(
                 camera.max_ground_speed_ms(request.altitude_m, request.front_overlap), 1
             ),
+            "endurance_min": round(plan.endurance_min, 1),
+            "batteries_needed": round(plan.batteries_needed, 2),
+            "best_survey_speed_ms": round(plan.best_survey_speed_ms, 1),
+            "calibrated": request.measured_hover_min is not None,
         },
         "warnings": plan.warnings,
     }

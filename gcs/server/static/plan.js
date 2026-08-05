@@ -136,6 +136,8 @@
     side: document.getElementById("in-side"),
     heading: document.getElementById("in-heading"),
     pattern: document.getElementById("in-pattern"),
+    weight: document.getElementById("in-weight"),
+    hover: document.getElementById("in-hover"),
   };
 
   const outputs = {
@@ -144,6 +146,7 @@
     front: document.getElementById("out-front"),
     side: document.getElementById("out-side"),
     heading: document.getElementById("out-heading"),
+    weight: document.getElementById("out-weight"),
   };
 
   function syncLabels() {
@@ -152,6 +155,7 @@
     outputs.front.textContent = `${inputs.front.value}%`;
     outputs.side.textContent = `${inputs.side.value}%`;
     outputs.heading.textContent = `${inputs.heading.value}°`;
+    outputs.weight.textContent = `${Number(inputs.weight.value).toFixed(2)} kg`;
   }
 
   Object.values(inputs).forEach((input) => {
@@ -188,6 +192,8 @@
       side_overlap: Number(inputs.side.value) / 100,
       heading_deg: Number(inputs.heading.value),
       pattern: inputs.pattern.value,
+      all_up_weight_kg: Number(inputs.weight.value),
+      measured_hover_min: inputs.hover.value ? Number(inputs.hover.value) : null,
     };
 
     let plan;
@@ -241,22 +247,35 @@
     const s = plan.stats;
     const overSpeed = Number(inputs.speed.value) > s.max_ground_speed_ms;
 
+    // Batteries is the number that decides whether a survey is flyable at all,
+    // so it gets the strongest treatment: red over one pack, amber when tight.
+    const batteryTone =
+      s.batteries_needed > 1 ? "bad" : s.batteries_needed > 0.8 ? "warn" : "good";
+
     document.getElementById("plan-stats").className = "plan-stats";
     document.getElementById("plan-stats").innerHTML = `
       <div class="stat-grid">
         ${stat("Area", `${s.area_acres} ac`)}
         ${stat("Detail", `${s.gsd_cm_per_px} cm/px`)}
         ${stat("Photos", s.photo_count)}
-        ${stat("Flight time", `${s.duration_min} min`, s.duration_min > 15 ? "warn" : "")}
-        ${stat("Lines", s.line_count)}
-        ${stat("Distance", `${(s.path_length_m / 1000).toFixed(1)} km`)}
+        ${stat("Flight time", `${s.duration_min} min`)}
+        ${stat("Batteries", s.batteries_needed.toFixed(2), batteryTone)}
+        ${stat("Endurance", `${s.endurance_min} min`)}
       </div>
       <table class="detail-table">
+        <tr><td>Lines</td><td>${s.line_count}</td></tr>
+        <tr><td>Distance</td><td>${(s.path_length_m / 1000).toFixed(1)} km</td></tr>
         <tr><td>Photo every</td><td>${s.photo_spacing_m} m</td></tr>
         <tr><td>Line spacing</td><td>${s.line_spacing_m} m</td></tr>
-        <tr><td>Max safe speed</td>
+        <tr><td>Max shutter speed</td>
             <td class="${overSpeed ? "bad" : ""}">${s.max_ground_speed_ms} m/s</td></tr>
+        <tr><td>Best survey speed</td><td>${s.best_survey_speed_ms} m/s</td></tr>
       </table>`;
+
+    document.getElementById("calibration-note").textContent = s.calibrated
+      ? "Endurance calibrated to your measured hover time."
+      : "Endurance is estimated from component figures. Fly a timed hover at real " +
+        "weight and enter it here to replace the estimate with measurement.";
 
     document.getElementById("plan-warnings").innerHTML = plan.warnings
       .map((w) => `<p class="warning">${w}</p>`)

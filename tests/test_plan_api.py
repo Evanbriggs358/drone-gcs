@@ -79,6 +79,50 @@ class TestWarnings:
         assert any("Overlap below 60%" in w for w in warnings)
 
 
+class TestEndurance:
+    def test_plan_reports_battery_usage(self):
+        stats = plan().json()["stats"]
+        assert stats["endurance_min"] > 0
+        assert stats["batteries_needed"] > 0
+        assert stats["best_survey_speed_ms"] > 0
+
+    def test_uncalibrated_by_default(self):
+        assert plan().json()["stats"]["calibrated"] is False
+
+    def test_measured_hover_calibrates_the_model(self):
+        estimated = plan().json()["stats"]
+        measured = plan(measured_hover_min=12.0).json()["stats"]
+        assert measured["calibrated"] is True
+        assert measured["endurance_min"] < estimated["endurance_min"]
+        assert measured["batteries_needed"] > estimated["batteries_needed"]
+
+    def test_a_heavier_aircraft_needs_more_battery(self):
+        light = plan(all_up_weight_kg=1.3).json()["stats"]
+        heavy = plan(all_up_weight_kg=2.5).json()["stats"]
+        assert heavy["endurance_min"] < light["endurance_min"]
+
+    def test_a_bigger_battery_stretches_further(self):
+        small = plan(battery_capacity_mah=3000).json()["stats"]
+        big = plan(battery_capacity_mah=8000).json()["stats"]
+        assert big["endurance_min"] > small["endurance_min"]
+
+    def test_a_survey_beyond_one_battery_is_flagged(self):
+        big_area = [
+            [47.58, -122.37], [47.58, -122.28], [47.65, -122.28], [47.65, -122.37]
+        ]
+        response = client.post(
+            "/api/plan",
+            json={"polygon": big_area, "altitude_m": 60, "ground_speed_ms": 6},
+        )
+        data = response.json()
+        assert data["stats"]["batteries_needed"] > 1
+        assert any("batteries" in w for w in data["warnings"])
+
+    def test_flying_well_below_the_efficient_speed_is_flagged(self):
+        warnings = plan(ground_speed_ms=3).json()["warnings"]
+        assert any("more ground per battery" in w for w in warnings)
+
+
 class TestValidation:
     def test_too_few_vertices_is_rejected(self):
         assert client.post(

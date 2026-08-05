@@ -150,6 +150,21 @@ button.secondary:hover { border-color: var(--accent); }
 }
 .stat-value { font-size: 17px; font-weight: 600; margin-top: 2px; }
 .stat-value.warn { color: var(--warn); }
+.stat-value.bad { color: var(--bad); }
+.stat-value.good { color: var(--good); }
+
+#plan-panel input[type="number"] {
+  width: 100%;
+  margin-top: 6px;
+  background: var(--panel-2);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  padding: 7px;
+  font: inherit;
+  font-size: 13px;
+}
+#calibration-note { margin-top: 8px; }
 
 .detail-table { width: 100%; font-size: 12.5px; }
 .detail-table td { padding: 4px 0; border-bottom: 1px solid var(--line); }

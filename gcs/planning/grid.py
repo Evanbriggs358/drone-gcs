@@ -21,6 +21,7 @@ from math import atan2, ceil, cos, hypot, radians, sin
 
 from .camera import Camera
 from .geo import LatLon, LocalFrame, polygon_area_m2, rotate
+from .power import Airframe, Battery
 
 Point = tuple[float, float]
 
@@ -72,6 +73,14 @@ class SurveyPlan:
     line_spacing_m: float
     warnings: list[str] = field(default_factory=list)
 
+    #: Endurance at the planned survey speed, when an aircraft and battery were
+    #: supplied. None means no endurance analysis was requested.
+    endurance_min: float | None = None
+    #: Batteries the mission needs. Above 1.0 means a pack change mid-survey.
+    batteries_needed: float | None = None
+    #: Speed that would cover the most ground per battery, camera permitting.
+    best_survey_speed_ms: float | None = None
+
     @property
     def photo_count(self) -> int:
         return len(self.photo_points)
@@ -85,10 +94,21 @@ class SurveyPlan:
         return self.duration_s / 60.0
 
 
-def plan_survey(polygon: list[LatLon], camera: Camera, params: SurveyParams) -> SurveyPlan:
+def plan_survey(
+    polygon: list[LatLon],
+    camera: Camera,
+    params: SurveyParams,
+    airframe: Airframe | None = None,
+    battery: Battery | None = None,
+) -> SurveyPlan:
     """Build a complete survey plan for a polygon.
 
     ``polygon`` is an unclosed ring of (lat, lon) vertices, in any winding order.
+
+    Supplying ``airframe`` and ``battery`` adds endurance analysis: how many
+    packs the mission needs, and what speed would cover the most ground per
+    pack. Without them the plan still reports duration, just not whether the
+    aircraft can actually stay up that long.
     """
     if len(polygon) < 3:
         raise ValueError("a survey polygon needs at least 3 vertices")
@@ -125,6 +145,22 @@ def plan_survey(polygon: list[LatLon], camera: Camera, params: SurveyParams) -> 
         + len(all_lines) * params.turn_penalty_s
     )
 
+    warnings = _check(camera, params, photo_spacing)
+
+    endurance = batteries = best_speed = None
+    if airframe is not None and battery is not None:
+        endurance = airframe.endurance_min(battery, params.ground_speed_ms)
+        batteries = (duration / 60.0) / endurance
+
+        shutter_limit = camera.max_ground_speed_ms(
+            params.altitude_m, params.front_overlap
+        )
+        best_speed = min(airframe.best_range_speed_ms(), shutter_limit)
+
+        warnings.extend(
+            _check_endurance(params, endurance, batteries, best_speed, airframe, battery)
+        )
+
     return SurveyPlan(
         waypoints=waypoints,
         photo_points=photo_points,
@@ -135,8 +171,50 @@ def plan_survey(polygon: list[LatLon], camera: Camera, params: SurveyParams) -> 
         gsd_cm_per_px=camera.gsd_cm_per_px(params.altitude_m),
         photo_spacing_m=photo_spacing,
         line_spacing_m=line_spacing,
-        warnings=_check(camera, params, photo_spacing),
+        warnings=warnings,
+        endurance_min=endurance,
+        batteries_needed=batteries,
+        best_survey_speed_ms=best_speed,
     )
+
+
+def _check_endurance(
+    params: SurveyParams,
+    endurance_min: float,
+    batteries: float,
+    best_speed: float,
+    airframe: Airframe,
+    battery: Battery,
+) -> list[str]:
+    """Flag missions the aircraft cannot actually complete, and speeds that
+    waste endurance."""
+    warnings: list[str] = []
+
+    if batteries > 1.0:
+        warnings.append(
+            f"Mission needs about {batteries:.1f} batteries: "
+            f"{params.ground_speed_ms:.0f} m/s gives {endurance_min:.0f} min of "
+            f"flight and the survey takes longer. Shrink the area, raise the "
+            f"altitude, or plan a pack change."
+        )
+    elif batteries > 0.8:
+        warnings.append(
+            f"Little margin: the survey uses about {batteries:.0%} of a battery. "
+            "Wind or a cold pack could leave you short."
+        )
+
+    # Only worth mentioning if the gain is real rather than rounding.
+    gain = airframe.range_km(battery, best_speed) / max(
+        airframe.range_km(battery, params.ground_speed_ms), 1e-6
+    )
+    if gain > 1.10:
+        warnings.append(
+            f"Flying at {best_speed:.0f} m/s instead of "
+            f"{params.ground_speed_ms:.0f} m/s would cover about {gain - 1:.0%} "
+            "more ground per battery."
+        )
+
+    return warnings
 
 
 def _check(camera: Camera, params: SurveyParams, photo_spacing: float) -> list[str]:
