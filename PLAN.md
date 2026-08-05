@@ -298,6 +298,67 @@ open area → full mapping missions. Do not jump to a mapping mission on day one
 
 ---
 
+## From simulator to real aircraft
+
+SITL runs the actual ArduPilot flight code and speaks the same MAVLink the Kakute
+will, so most of the stack moves across untouched. What follows is an honest
+account of what does not.
+
+### Unchanged
+
+Survey planning, mission build/upload/verification, vehicle state, pre-flight
+gating, trigger handling, geotagging, the capture manifest, and offload. All of it
+was exercised against real ArduPilot, just running on a laptop.
+
+### Configuration only
+
+| | Simulator | Aircraft |
+|---|---|---|
+| `DRONE_FC_ENDPOINT` | `tcp:127.0.0.1:5762` | `/dev/serial0` |
+| `DRONE_FC_BAUD` | n/a | `921600` |
+| `DRONE_FAKE_CAMERA` | `1` | unset |
+
+### Untested — expect problems here first
+
+1. **`PiCameraModule3` has never run.** Written against picamera2's documentation
+   and impossible to execute off a Pi. Most likely source of first-run breakage.
+2. **Real capture duration is unknown.** `FakeCamera` writes a small JPEG in
+   milliseconds; a 12 MP capture takes a substantial fraction of a second. Measure
+   it and set `Camera.min_capture_interval_s` in `gcs/planning/camera.py` to the
+   real figure, so `max_ground_speed_ms` stops being a guess.
+3. **Sustained write speed.** ~5 MB per photo every ~1.7 s is roughly 3 MB/s to
+   the microSD, continuously.
+4. **The serial link.** Wiring, baud, and `SERIALn_PROTOCOL=2` on the Kakute.
+   SITL used TCP, so none of this has been exercised.
+5. **Real GNSS behaviour.** SITL reports `RTK_FIXED` with 10 satellites
+   immediately. Expect a slower fix and worse HDOP outdoors; the pre-flight
+   thresholds may need revisiting against reality rather than relaxing on sight.
+6. **Thermal behaviour.** A Pi 4 capturing 12 MP frames inside a carbon frame in
+   sunlight is a throttling candidate.
+
+### Required flight-controller parameters
+
+Confirmed necessary during SITL testing:
+
+- `CAM1_TYPE` — a camera backend must exist or the autopilot never announces
+  triggers. A servo backend with nothing wired to the output is correct: the
+  trigger is a *decision*, broadcast over MAVLink, and the Pi acts on it.
+- `AUTO_OPTIONS` bit 1 — otherwise an armed aircraft waits for throttle input
+  that an autonomous launch never provides.
+- `SERIALn_PROTOCOL = 2` on the UART going to the Pi.
+- Waypoint speed is `WP_SPD` (m/s) on current firmware, `WPNAV_SPEED` (cm/s) on
+  older. The code tries both.
+
+### Software bring-up order on the Pi
+
+1. Install, run `python -m gcs.companion` by hand, confirm `/health`.
+2. Fix whatever `PiCameraModule3` gets wrong. Capture one frame to disk.
+3. Time a full-resolution capture; update `min_capture_interval_s`.
+4. Wire the UART, confirm `/health` reports the link connected.
+5. Bench-test triggering: set `CAM1_TRIGG_DIST`, walk the aircraft around, and
+   confirm photos appear with sensible geotags.
+6. Only then install the systemd unit and fly.
+
 ## Immediate next steps
 
 1. Confirm the project folder location (see SPEC §2.4 — currently
