@@ -207,14 +207,39 @@ class MissionRequest(BaseModel):
     home: tuple[float, float] | None = None
 
 
+def _simulated_reasons() -> list[str]:
+    """Why this is not a real aircraft, in words a pilot can act on.
+
+    A ground station reporting a healthy GPS lock is worthless — dangerous,
+    even — if the healthy GPS belongs to a simulator. Nothing about the numbers
+    themselves reveals that, so it has to be stated outright.
+    """
+    reasons = []
+    if USE_FAKE_CAMERA or type(worker.camera).__name__ == "FakeCamera":
+        reasons.append("the camera is simulated, not a real Pi Camera")
+    endpoint = FC_ENDPOINT.lower()
+    if endpoint.startswith(("tcp:", "udp:", "tcpin:")):
+        if "127.0.0.1" in endpoint or "localhost" in endpoint:
+            reasons.append(
+                "the flight controller is a simulator on this computer, not an aircraft"
+            )
+        else:
+            reasons.append("the flight controller is reached over the network, not a serial port")
+    return reasons
+
+
 @app.get("/health")
 def health() -> dict:
     """Everything the pre-flight checklist needs to know about the Pi."""
     usage = shutil.disk_usage(PHOTO_ROOT if PHOTO_ROOT.exists() else Path.home())
+    reasons = _simulated_reasons()
     return {
         "service": "ok",
         "camera": type(worker.camera).__name__,
-        "camera_is_fake": isinstance(worker.camera, type(worker.camera)) and USE_FAKE_CAMERA,
+        "camera_is_fake": USE_FAKE_CAMERA or type(worker.camera).__name__ == "FakeCamera",
+        "simulated": bool(reasons),
+        "simulated_reasons": reasons,
+        "fc_endpoint": FC_ENDPOINT,
         "free_disk_gb": round(usage.free / 1024**3, 1),
         "total_disk_gb": round(usage.total / 1024**3, 1),
         "link": asdict(worker.link_status),
@@ -298,9 +323,12 @@ def preflight(mission_waypoints: int = 0, estimated_photos: int = 0) -> dict:
         estimated_photos=estimated_photos,
     )
 
+    reasons = _simulated_reasons()
     return {
         "ready_to_arm": report.ready_to_arm,
         "summary": report.summary(),
+        "simulated": bool(reasons),
+        "simulated_reasons": reasons,
         "checks": [
             {
                 "name": c.name,

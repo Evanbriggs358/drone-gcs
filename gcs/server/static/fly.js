@@ -39,6 +39,7 @@
       fly.connected = true;
       el("in-companion").value = data.url;
       const h = data.health;
+      setSimulatorBanner(h.simulated, h.simulated_reasons, h.fc_endpoint);
       setLink(
         `Connected to ${data.url} — ${h.camera}, ${h.free_disk_gb} GB free, ` +
         `flight controller ${h.link.connected ? "up" : "DOWN"}.`,
@@ -55,7 +56,10 @@
     fly.connected = false;
     stopPolling();
     setLink("Not connected.", "muted");
+    setSimulatorBanner(false);
     el("telemetry").classList.add("hidden");
+    el("preflight").innerHTML = "";
+    el("btn-upload").disabled = true;
     clearAircraft();
   });
 
@@ -63,6 +67,19 @@
     const node = el("link-status");
     node.textContent = text;
     node.className = `link-status ${tone}`;
+  }
+
+  function setSimulatorBanner(simulated, reasons, endpoint) {
+    const banner = el("sim-banner");
+    if (!simulated) {
+      banner.classList.add("hidden");
+      return;
+    }
+    banner.classList.remove("hidden");
+    banner.innerHTML =
+      `<b>SIMULATION — THIS IS NOT A REAL AIRCRAFT.</b> ` +
+      `<span>Every reading below describes a simulation: ${reasons.join("; ")}. ` +
+      `Connected to <code>${endpoint}</code>.</span>`;
   }
 
   // -- telemetry polling --------------------------------------------------
@@ -189,7 +206,13 @@
       return;
     }
 
+    setSimulatorBanner(report.simulated, report.simulated_reasons, "");
+
     panel.innerHTML =
+      (report.simulated
+        ? '<p class="check warn"><b>Simulated aircraft</b><span>These results ' +
+          'describe a simulation, not your drone.</span></p>'
+        : "") +
       `<p class="preflight-summary ${report.ready_to_arm ? "good" : "bad"}">
          ${report.summary}
        </p>` +

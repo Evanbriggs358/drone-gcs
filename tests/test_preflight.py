@@ -126,6 +126,40 @@ class TestLink:
         assert "ago" in find(rep, "Telemetry link").detail
 
 
+class TestStaleData:
+    """Checks read values the vehicle last reported. Once the link goes quiet
+    those are history, not status — showing them green would claim a healthy
+    GPS lock for an aircraft that stopped talking minutes ago."""
+
+    def stale(self):
+        state = healthy_state()
+        state.last_heartbeat_s = time.monotonic() - 300.0
+        return report(state)
+
+    @pytest.mark.parametrize("name", ["GPS fix", "GPS accuracy", "Battery", "Arming state"])
+    def test_vehicle_derived_checks_stop_reporting_green(self, name):
+        check = find(self.stale(), name)
+        assert not check.passed
+        assert "No recent data" in check.detail
+
+    def test_never_reports_ready(self):
+        assert not self.stale().ready_to_arm
+
+    def test_checks_not_derived_from_the_vehicle_still_report(self):
+        """Mission, camera, and storage are known locally and stay meaningful."""
+        rep = self.stale()
+        assert find(rep, "Mission").passed
+        assert find(rep, "Camera").passed
+        assert find(rep, "Storage").passed
+
+    def test_a_disconnected_vehicle_does_not_look_healthy(self):
+        """The specific failure this guards: a panel of green ticks describing
+        an aircraft that is switched off."""
+        rep = report(VehicleState())
+        vehicle_checks = ["GPS fix", "GPS accuracy", "Battery", "Arming state"]
+        assert not any(find(rep, name).passed for name in vehicle_checks)
+
+
 class TestMissionAndPayload:
     def test_no_mission_blocks(self):
         assert not report(mission_waypoint_count=0).ready_to_arm

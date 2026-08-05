@@ -96,10 +96,23 @@ def run_preflight(
     checks: list[Check] = []
 
     checks.append(_check_link(state, limits))
-    checks.append(_check_gps(state, limits))
-    checks.append(_check_hdop(state, limits))
-    checks.append(_check_battery(state, limits))
-    checks.append(_check_not_armed(state))
+
+    # Everything below reads values the vehicle last reported. If the link has
+    # gone quiet those values are history, not status, and showing them green
+    # would say "GPS fine" about an aircraft that stopped talking minutes ago.
+    age = state.link_age_s()
+    stale = age is None or age > limits.max_link_age_s
+
+    if stale:
+        for name in ("GPS fix", "GPS accuracy", "Battery", "Arming state"):
+            checks.append(
+                Check(name, False, "No recent data — the vehicle is not reporting")
+            )
+    else:
+        checks.append(_check_gps(state, limits))
+        checks.append(_check_hdop(state, limits))
+        checks.append(_check_battery(state, limits))
+        checks.append(_check_not_armed(state))
     checks.append(_check_mission(mission_waypoint_count))
     checks.append(
         Check(

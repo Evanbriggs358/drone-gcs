@@ -33,6 +33,23 @@ header h1 { margin: 0; font-size: 16px; letter-spacing: .3px; }
 .subtitle { color: var(--muted); font-size: 13px; }
 #project-name { margin-left: auto; color: var(--accent); font-weight: 600; }
 
+/* Simulator warning. Deliberately loud and above everything else: a pre-flight
+   panel full of green ticks means nothing if the healthy aircraft it describes
+   is a simulation, and no number on the screen reveals that by itself. */
+.sim-banner {
+  background: repeating-linear-gradient(
+    45deg, #6b4a00, #6b4a00 12px, #7d5700 12px, #7d5700 24px
+  );
+  color: #ffe9b0;
+  padding: 8px 20px;
+  font-size: 13px;
+  font-weight: 600;
+  border-bottom: 2px solid #d29922;
+  line-height: 1.45;
+}
+.sim-banner b { color: #fff; letter-spacing: .04em; }
+.sim-banner span { font-weight: 400; }
+
 /* -- page shell --------------------------------------------------------- */
 
 nav#pages { display: flex; gap: 4px; margin-left: 22px; }
