@@ -1,0 +1,43 @@
+# Companion service for the drone-gcs mapping platform.
+#
+# Install on the Raspberry Pi:
+#
+#   sudo cp deploy/drone-companion.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now drone-companion
+#
+# Check it:
+#
+#   systemctl status drone-companion
+#   journalctl -u drone-companion -f
+#
+# This is what removes the SSH-and-launch-a-script step: the service is running
+# before you reach the flight line, and restarts itself if it ever dies.
+
+[Unit]
+Description=drone-gcs companion service (capture and geotagging)
+After=network.target
+Wants=network.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/drone-gcs
+
+Environment=DRONE_FC_ENDPOINT=/dev/serial0
+Environment=DRONE_FC_BAUD=921600
+Environment=DRONE_PHOTO_ROOT=/home/pi/flights
+# picamera2 is installed system-wide by Raspberry Pi OS, so the service runs
+# against the system interpreter rather than an isolated virtualenv.
+ExecStart=/usr/bin/python3 -m gcs.companion --host 0.0.0.0 --port 8001
+
+# A crash mid-flight must not end the mission's imagery. Restart always, and
+# quickly, since the capture loop reconnects to the flight controller by itself.
+Restart=always
+RestartSec=3
+
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
