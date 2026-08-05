@@ -16,7 +16,9 @@ from pathlib import Path
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel, Field
 
+from ..planning import CAMERAS, PI_CAMERA_MODULE_3, Pattern, SurveyParams, plan_survey
 from ..processing.odm import find_products
 
 #: Root holding one folder per reconstruction. Override with DRONE_DATA_DIR.
@@ -159,6 +161,84 @@ def get_stats(project: str) -> dict:
         "camera_positions": [
             {"lat": t.lat, "lon": t.lon, "yaw": t.yaw_deg} for t in tags
         ],
+    }
+
+
+# -- mission planning ------------------------------------------------------
+
+
+class PlanRequest(BaseModel):
+    """A survey area plus the parameters that turn it into a flight."""
+
+    #: Polygon vertices as [latitude, longitude] pairs, unclosed.
+    polygon: list[tuple[float, float]] = Field(min_length=3)
+    altitude_m: float = Field(gt=0, le=500)
+    front_overlap: float = Field(default=0.70, ge=0, lt=1)
+    side_overlap: float = Field(default=0.70, ge=0, lt=1)
+    ground_speed_ms: float = Field(default=8.0, gt=0, le=30)
+    heading_deg: float = 0.0
+    pattern: str = "nadir"
+    camera: str | None = None
+
+
+@app.get("/api/cameras")
+def list_cameras() -> list[dict]:
+    return [
+        {
+            "name": camera.name,
+            "megapixels": round(camera.image_width_px * camera.image_height_px / 1e6, 1),
+            "hfov_deg": round(camera.hfov_deg, 1),
+        }
+        for camera in CAMERAS.values()
+    ]
+
+
+@app.post("/api/plan")
+def make_plan(request: PlanRequest) -> dict:
+    """Turn a drawn polygon into a flight plan, with the numbers that matter.
+
+    Called on every parameter change, so the operator sees ground sample
+    distance, photo count, and flight time update as they drag a slider rather
+    than discovering them after upload.
+    """
+    camera = CAMERAS.get(request.camera or "", PI_CAMERA_MODULE_3)
+
+    try:
+        pattern = Pattern(request.pattern)
+    except ValueError:
+        raise HTTPException(400, f"unknown pattern {request.pattern!r}")
+
+    params = SurveyParams(
+        altitude_m=request.altitude_m,
+        front_overlap=request.front_overlap,
+        side_overlap=request.side_overlap,
+        ground_speed_ms=request.ground_speed_ms,
+        heading_deg=request.heading_deg,
+        pattern=pattern,
+    )
+
+    try:
+        plan = plan_survey([tuple(p) for p in request.polygon], camera, params)
+    except ValueError as error:
+        raise HTTPException(400, str(error))
+
+    return {
+        "waypoints": [[w.lat, w.lon] for w in plan.waypoints],
+        "photo_points": [[lat, lon] for lat, lon in plan.photo_points],
+        "stats": {
+            "area_acres": round(plan.area_acres, 2),
+            "gsd_cm_per_px": round(plan.gsd_cm_per_px, 2),
+            "line_count": plan.line_count,
+            "photo_count": plan.photo_count,
+            "path_length_m": round(plan.path_length_m),
+            "duration_min": round(plan.duration_min, 1),
+            "photo_spacing_m": round(plan.photo_spacing_m, 1),
+            "line_spacing_m": round(plan.line_spacing_m, 1),
+            "max_ground_speed_ms": round(
+                camera.max_ground_speed_ms(request.altitude_m, request.front_overlap), 1
+            ),
+        },
+        "warnings": plan.warnings,
     }
 
 

@@ -359,6 +359,23 @@ Confirmed necessary during SITL testing:
    confirm photos appear with sensible geotags.
 6. Only then install the systemd unit and fly.
 
+## Committed next: flight-log diagnostics (SPEC Phase E2)
+
+Deferred behind the ground-station UI, but **agreed and not dropped**. This is the
+piece aimed at the reported position-hold drift, and it should exist before the
+first ArduPilot logs are generated so there is something to point at them.
+
+- Compass health against the World Magnetic Model
+- Motor-current correlation, to catch compass error that scales with throttle —
+  the signature of ESC interference
+- Vibration levels and EKF innovations against ArduPilot's thresholds
+- One-click log export prepared for the MAGFit web tool
+
+Worth restating plainly: **none of the ground-station software fixes flight
+stability.** Drift is a flight-controller and airframe problem. The firmware
+switch, a correctly mounted FC, and AutoTune are the fixes; this tooling only
+diagnoses and prevents flying into a known-bad state.
+
 ## Immediate next steps
 
 1. Confirm the project folder location (see SPEC §2.4 — currently

@@ -3,8 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>drone-gcs — survey results</title>
+<title>drone-gcs</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <link rel="stylesheet" href="/style.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script type="importmap">
 {
   "imports": {
@@ -18,12 +20,65 @@
 
 <header>
   <h1>drone&#8209;gcs</h1>
-  <span class="subtitle">survey results</span>
+  <nav id="pages">
+    <button class="page-tab active" data-page="plan">Plan a survey</button>
+    <button class="page-tab" data-page="results">Results</button>
+  </nav>
   <span id="project-name"></span>
 </header>
 
-<div id="layout">
+<!-- ============================ PLAN ============================ -->
+<div id="page-plan" class="page active">
 
+  <aside id="plan-panel">
+    <h2>Survey area</h2>
+    <p id="draw-hint" class="hint-block">
+      Click on the map to place corners. Three or more makes a survey area.
+    </p>
+    <div class="button-row">
+      <button id="btn-undo" class="secondary">Undo point</button>
+      <button id="btn-clear" class="secondary">Clear</button>
+    </div>
+
+    <h2>Flight</h2>
+    <label>Altitude
+      <span class="value-out" id="out-altitude">80 m</span>
+      <input type="range" id="in-altitude" min="20" max="200" step="5" value="80">
+    </label>
+    <label>Ground speed
+      <span class="value-out" id="out-speed">8 m/s</span>
+      <input type="range" id="in-speed" min="2" max="20" step="0.5" value="8">
+    </label>
+    <label>Front overlap
+      <span class="value-out" id="out-front">70%</span>
+      <input type="range" id="in-front" min="50" max="90" step="5" value="70">
+    </label>
+    <label>Side overlap
+      <span class="value-out" id="out-side">70%</span>
+      <input type="range" id="in-side" min="50" max="90" step="5" value="70">
+    </label>
+    <label>Grid heading
+      <span class="value-out" id="out-heading">0&deg;</span>
+      <input type="range" id="in-heading" min="0" max="175" step="5" value="0">
+    </label>
+
+    <label class="select-label">Pattern
+      <select id="in-pattern">
+        <option value="nadir">Nadir — orthomosaic</option>
+        <option value="crosshatch">Crosshatch — 3D model</option>
+      </select>
+    </label>
+
+    <h2>Result</h2>
+    <div id="plan-stats" class="plan-stats muted">Draw an area to see the flight plan.</div>
+    <div id="plan-warnings"></div>
+  </aside>
+
+  <div id="map"></div>
+</div>
+
+<!-- =========================== RESULTS =========================== -->
+<div id="page-results" class="page">
   <nav id="sidebar">
     <h2>Reconstructions</h2>
     <ul id="project-list"><li class="empty">Loading&hellip;</li></ul>
@@ -58,9 +113,9 @@
       <div id="stats-body" class="status">Select a reconstruction</div>
     </section>
   </main>
-
 </div>
 
+<script src="/plan.js"></script>
 <script type="module" src="/app.js"></script>
 </body>
 </html>
