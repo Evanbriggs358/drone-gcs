@@ -63,13 +63,23 @@ def _describe(project_dir: Path) -> dict:
         "photos": photo_count,
         "has_map": products.has_map,
         "has_3d_model": products.has_3d_model,
+        # Downloadable data products.
         "products": {
             "orthophoto": relative(products.orthophoto),
-            "orthophoto_preview": relative(products.orthophoto_preview),
             "textured_model": relative(products.textured_model),
             "point_cloud": relative(products.point_cloud),
             "dsm": relative(products.dsm),
             "report": relative(products.report),
+        },
+        # Rendered map layers, kept separate from products so the download list
+        # stays data rather than pictures of data.
+        "layers": {
+            "ortho": relative(products.orthophoto_preview),
+            "elevation": relative(products.dsm_preview),
+            "elevation_legend": relative(products.dsm_legend),
+            "overlap": relative(products.overlap_preview),
+            "overlap_legend": relative(products.overlap_legend),
+            "cameras": relative(products.camera_positions_preview),
         },
     }
 

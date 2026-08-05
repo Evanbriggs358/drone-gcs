@@ -32,7 +32,7 @@
   <main>
     <div id="tabs" role="tablist">
       <button class="tab active" data-view="model" role="tab">3D model</button>
-      <button class="tab" data-view="map" role="tab">Orthomosaic</button>
+      <button class="tab" data-view="map" role="tab">Maps</button>
       <button class="tab" data-view="stats" role="tab">Survey data</button>
     </div>
 
@@ -43,8 +43,15 @@
     </section>
 
     <section id="view-map" class="view">
+      <div id="layer-bar" class="layer-bar hidden">
+        <div id="layer-buttons" class="layer-buttons"></div>
+        <div class="layer-detail">
+          <p id="layer-caption" class="layer-caption"></p>
+          <img id="layer-legend" class="legend hidden" alt="Legend">
+        </div>
+      </div>
       <div id="map-status" class="status">Select a reconstruction</div>
-      <div id="map-frame"><img id="ortho-image" alt="Orthomosaic"></div>
+      <div id="map-frame"><img id="ortho-image" alt=""></div>
     </section>
 
     <section id="view-stats" class="view">

@@ -49,7 +49,7 @@ function selectProject(project) {
     b.classList.toggle("selected", b.dataset.name === project.name)
   );
 
-  showOrtho(project);
+  showMaps(project);
   showStats(project);
   showModel(project);
 }
@@ -67,23 +67,94 @@ document.querySelectorAll(".tab").forEach((tab) => {
   });
 });
 
-// -- orthomosaic ----------------------------------------------------------
+// -- map layers -----------------------------------------------------------
 
-function showOrtho(project) {
-  const status = document.getElementById("map-status");
-  const frame = document.getElementById("map-frame");
-  const img = document.getElementById("ortho-image");
-  const preview = project.products.orthophoto_preview;
+const LAYERS = [
+  {
+    key: "ortho",
+    label: "Orthomosaic",
+    caption:
+      "Every photo reprojected as though shot from directly overhead, then " +
+      "stitched. Distances and areas measured on this are true to the ground.",
+  },
+  {
+    key: "elevation",
+    label: "Elevation",
+    legend: "elevation_legend",
+    caption:
+      "Digital surface model — the height of the ground and everything standing " +
+      "on it. Colour runs low to high, so the tree canopy separates clearly from " +
+      "the road beside it.",
+  },
+  {
+    key: "overlap",
+    label: "Photo overlap",
+    legend: "overlap_legend",
+    caption:
+      "How many photos see each point. Green is well covered; yellow and red " +
+      "mark thin coverage, where reconstruction degrades and the survey would " +
+      "need re-flying.",
+  },
+  {
+    key: "cameras",
+    label: "Camera positions",
+    caption:
+      "Where each photo was taken. Red triangles are the solved camera " +
+      "positions, cyan the recorded GPS fix, joined in capture order.",
+  },
+];
 
-  if (!preview) {
-    frame.classList.remove("ready");
-    status.classList.remove("hidden");
-    status.textContent = "No orthomosaic in this reconstruction";
+function showMaps(project) {
+  const bar = document.getElementById("layer-bar");
+  const buttons = document.getElementById("layer-buttons");
+  const available = LAYERS.filter((layer) => project.layers[layer.key]);
+
+  buttons.innerHTML = "";
+  if (!available.length) {
+    bar.classList.add("hidden");
+    setLayer(project, null);
     return;
   }
 
+  bar.classList.remove("hidden");
+  for (const layer of available) {
+    const button = document.createElement("button");
+    button.textContent = layer.label;
+    button.dataset.key = layer.key;
+    button.addEventListener("click", () => setLayer(project, layer));
+    buttons.appendChild(button);
+  }
+
+  setLayer(project, available[0]);
+}
+
+function setLayer(project, layer) {
+  const status = document.getElementById("map-status");
+  const frame = document.getElementById("map-frame");
+  const img = document.getElementById("ortho-image");
+  const legend = document.getElementById("layer-legend");
+  const caption = document.getElementById("layer-caption");
+
+  document.querySelectorAll("#layer-buttons button").forEach((b) =>
+    b.classList.toggle("active", !!layer && b.dataset.key === layer.key)
+  );
+
+  if (!layer) {
+    frame.classList.remove("ready");
+    status.classList.remove("hidden");
+    status.textContent = "No map layers in this reconstruction";
+    return;
+  }
+
+  caption.textContent = layer.caption;
+  img.alt = layer.label;
+
+  const legendPath = layer.legend && project.layers[layer.legend];
+  legend.classList.toggle("hidden", !legendPath);
+  if (legendPath) legend.src = `/files/${project.name}/${legendPath}`;
+
   status.classList.remove("hidden");
-  status.textContent = "Loading orthomosaic…";
+  status.textContent = `Loading ${layer.label.toLowerCase()}…`;
   frame.classList.remove("ready");
 
   img.onload = () => {
@@ -91,9 +162,9 @@ function showOrtho(project) {
     frame.classList.add("ready");
   };
   img.onerror = () => {
-    status.textContent = "Orthomosaic failed to load";
+    status.textContent = `${layer.label} failed to load`;
   };
-  img.src = `/files/${project.name}/${preview}`;
+  img.src = `/files/${project.name}/${project.layers[layer.key]}`;
 }
 
 // -- survey statistics ----------------------------------------------------

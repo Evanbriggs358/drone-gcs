@@ -103,6 +103,15 @@ class Products:
     dtm: Path | None = None
     report: Path | None = None
 
+    # Rendered diagnostic layers. ODM generates these for its own report; they
+    # answer questions an operator actually has — how high is the ground, was
+    # anything under-photographed, where was the aircraft when it shot.
+    dsm_preview: Path | None = None
+    dsm_legend: Path | None = None
+    overlap_preview: Path | None = None
+    overlap_legend: Path | None = None
+    camera_positions_preview: Path | None = None
+
     @property
     def has_map(self) -> bool:
         return self.orthophoto is not None
@@ -131,6 +140,11 @@ def find_products(project_dir: str | Path) -> Products:
         dsm=maybe("odm_dem", "dsm.tif"),
         dtm=maybe("odm_dem", "dtm.tif"),
         report=maybe("odm_report", "report.pdf"),
+        dsm_preview=maybe("opensfm", "stats", "dsm.png"),
+        dsm_legend=maybe("opensfm", "stats", "dsm_gradient.png"),
+        overlap_preview=maybe("opensfm", "stats", "overlap.png"),
+        overlap_legend=maybe("opensfm", "stats", "overlap_diagram_legend.png"),
+        camera_positions_preview=maybe("opensfm", "stats", "topview.png"),
     )
 
 

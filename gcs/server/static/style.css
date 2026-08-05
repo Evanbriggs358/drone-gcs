@@ -150,9 +150,64 @@ main { display: flex; flex-direction: column; min-width: 0; }
 }
 .bar > div { height: 100%; background: var(--accent); width: 0; transition: width .2s; }
 
-/* -- orthomosaic -------------------------------------------------------- */
+/* -- maps --------------------------------------------------------------- */
+
+#view-map.active { flex-direction: column; }
+
+.layer-bar {
+  padding: 12px 20px 10px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+}
+.layer-buttons { display: flex; flex-wrap: wrap; gap: 6px; }
+.layer-buttons button {
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  padding: 6px 12px;
+  color: var(--muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+}
+.layer-buttons button:hover { color: var(--text); border-color: #37415a; }
+.layer-buttons button.active {
+  color: var(--text);
+  border-color: var(--accent);
+  background: #16283c;
+}
+.layer-buttons button[disabled] { opacity: .35; cursor: not-allowed; }
+
+/* Caption and legend sit together in the bar. The legend used to be pinned to
+   the bottom of the scrolling image, which put it out of view on any map taller
+   than the pane — a legend you have to scroll to find is not a legend. */
+.layer-detail {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  margin-top: 9px;
+}
+
+.layer-caption {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12.5px;
+  max-width: 70ch;
+}
+
+.legend {
+  margin-left: auto;
+  max-height: 62px;
+  max-width: 190px;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 3px;
+  flex-shrink: 0;
+}
 
 #map-frame {
+  position: relative;
   flex: 1;
   overflow: auto;
   display: none;
