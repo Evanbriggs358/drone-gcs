@@ -171,6 +171,27 @@ button.secondary:hover { border-color: var(--accent); }
 #map { height: 100%; background: var(--bg); }
 .leaflet-container { background: #0e1116; }
 
+/* Draggable survey corners. Sized generously for the pointer rather than for
+   looks — a 6px dot is accurate to place and miserable to grab. */
+.vertex-handle {
+  box-sizing: border-box;
+  border: 2px solid var(--accent);
+  background: #0e1116;
+  border-radius: 50%;
+  cursor: grab;
+  transition: transform .08s ease, background-color .08s ease;
+}
+.vertex-handle:hover {
+  background: var(--accent);
+  transform: scale(1.35);
+}
+.vertex-handle:active,
+.leaflet-dragging .vertex-handle {
+  cursor: grabbing;
+  background: var(--accent);
+  transform: scale(1.2);
+}
+
 /* -- sidebar ------------------------------------------------------------ */
 
 #sidebar {

@@ -51,20 +51,50 @@
     replan();
   });
 
-  function redrawArea() {
-    state.markers.forEach((m) => map.removeLayer(m));
-    state.markers = state.vertices.map((point, index) =>
-      L.circleMarker(point, {
-        radius: 5,
-        color: "#4aa3ff",
-        fillColor: "#0e1116",
-        fillOpacity: 1,
-        weight: 2,
-      })
-        .addTo(map)
-        .bindTooltip(String(index + 1), { permanent: false })
-    );
+  // Corner handles are real markers rather than circleMarkers: only markers can
+  // be dragged, and canvas-rendered vectors are not DOM elements at all, so they
+  // cannot be hovered or grabbed.
+  const handleIcon = L.divIcon({
+    className: "vertex-handle",
+    iconSize: [14, 14],
+    iconAnchor: [7, 7],
+  });
 
+  function renderMarkers() {
+    state.markers.forEach((m) => map.removeLayer(m));
+    state.markers = state.vertices.map((point, index) => {
+      const marker = L.marker(point, {
+        icon: handleIcon,
+        draggable: true,
+        keyboard: false,
+        // Keep a dragged corner above its neighbours so it stays grabbable.
+        zIndexOffset: 1000,
+      }).addTo(map);
+
+      marker.bindTooltip(`Corner ${index + 1} — drag to move`, { direction: "top" });
+
+      marker.on("drag", (event) => {
+        const { lat, lng } = event.target.getLatLng();
+        state.vertices[index] = [lat, lng];
+        // Only the outline follows the cursor. Re-planning the whole grid on
+        // every drag frame would stutter on a large survey, so that waits for
+        // the drag to finish.
+        renderPolygon();
+      });
+
+      marker.on("dragend", () => {
+        renderPolygon();
+        replan();
+      });
+
+      // A click that ends a drag must not also drop a new corner on the map.
+      marker.on("click", (event) => L.DomEvent.stopPropagation(event));
+
+      return marker;
+    });
+  }
+
+  function renderPolygon() {
     if (state.polygon) map.removeLayer(state.polygon);
     state.polygon = null;
 
@@ -81,11 +111,20 @@
         dashArray: "4 4",
       }).addTo(map);
     }
+  }
 
+  function updateHint() {
+    const count = state.vertices.length;
     document.getElementById("draw-hint").textContent =
-      state.vertices.length === 0
+      count === 0
         ? "Click on the map to place corners. Three or more makes a survey area."
-        : `${state.vertices.length} corner${state.vertices.length === 1 ? "" : "s"} placed.`;
+        : `${count} corner${count === 1 ? "" : "s"} placed. Drag any corner to adjust it.`;
+  }
+
+  function redrawArea() {
+    renderMarkers();
+    renderPolygon();
+    updateHint();
   }
 
   // -- parameters ---------------------------------------------------------
@@ -247,4 +286,8 @@
   });
 
   redrawArea();
+
+  // Exposed for debugging from the browser console: inspect the map, the
+  // current survey vertices, and force a re-plan.
+  window.planner = { map, state, replan };
 })();
