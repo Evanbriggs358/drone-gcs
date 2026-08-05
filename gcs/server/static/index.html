@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>drone-gcs — survey results</title>
+<link rel="stylesheet" href="/style.css">
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.170.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.170.0/examples/jsm/"
+  }
+}
+</script>
+</head>
+<body>
+
+<header>
+  <h1>drone&#8209;gcs</h1>
+  <span class="subtitle">survey results</span>
+  <span id="project-name"></span>
+</header>
+
+<div id="layout">
+
+  <nav id="sidebar">
+    <h2>Reconstructions</h2>
+    <ul id="project-list"><li class="empty">Loading&hellip;</li></ul>
+  </nav>
+
+  <main>
+    <div id="tabs" role="tablist">
+      <button class="tab active" data-view="model" role="tab">3D model</button>
+      <button class="tab" data-view="map" role="tab">Orthomosaic</button>
+      <button class="tab" data-view="stats" role="tab">Survey data</button>
+    </div>
+
+    <section id="view-model" class="view active">
+      <div id="model-status" class="status">Select a reconstruction</div>
+      <canvas id="model-canvas"></canvas>
+      <div id="model-hint" class="hint hidden">drag to orbit &middot; scroll to zoom &middot; right&#8209;drag to pan</div>
+    </section>
+
+    <section id="view-map" class="view">
+      <div id="map-status" class="status">Select a reconstruction</div>
+      <div id="map-frame"><img id="ortho-image" alt="Orthomosaic"></div>
+    </section>
+
+    <section id="view-stats" class="view">
+      <div id="stats-body" class="status">Select a reconstruction</div>
+    </section>
+  </main>
+
+</div>
+
+<script type="module" src="/app.js"></script>
+</body>
+</html>
