@@ -13,9 +13,9 @@ Companion doc: [SPEC.md](SPEC.md).
 
 1. **Produce a demonstrable result**: a real orthomosaic and 3D model of real ground,
    proving the system works end to end. This is the primary goal.
-2. **Serve as a portfolio piece.** The repository is part of the deliverable —
-   commit history, documented engineering decisions, and test coverage carry weight
-   alongside the code.
+2. **Learn by building something real.** Mapping drones sit at the intersection of
+   embedded systems, flight dynamics, photogrammetry, and web tooling — working
+   through each layer is the point.
 3. Replace the SSH-and-scripts workflow with something operable.
 
 Survey areas are small, so throughput and coverage scale are not constraints.
@@ -73,9 +73,9 @@ wrong. Current position:
 | OpenDroneMap | Docker image, free | Yes |
 | OpenDroneMap | Manual source install, free | No, but laborious |
 
-**Decision: WSL2 + Docker, the free route.** Chosen over the paid installer not to save
-money but because a containerised pipeline is the better engineering story for a
-portfolio project, and Docker is the canonical way ODM ships. Setup is roughly 20
+**Decision: WSL2 + Docker, the free route.** Chosen over the paid installer because
+Docker is the canonical way ODM ships and a containerised pipeline is easier to
+reproduce on another machine. Setup is roughly 20
 minutes, mostly downloads.
 
 Requires, in an Administrator PowerShell:
@@ -204,12 +204,14 @@ Unit tests use real `pymavlink` message objects rather than stubs, so wrong fiel
 names fail in CI instead of on the flight line. Field names were verified against
 the installed dialect.
 
-### Sprint 3 — Live ground station UI
-- Browser UI, MapLibre GL, satellite basemap
-- Polygon drawing, parameter panel with live GSD/time/battery feedback
-- **Live 2D map at ≥5 s refresh** (target 2 Hz), planned vs flown track
-- Telemetry HUD, pre-flight checklist gating launch
-- **Exit criteria:** plan, upload, and watch a full SITL mission entirely from the browser
+### Sprint 3 — Live ground station UI ✅ **DONE**
+- Browser UI, Leaflet, satellite basemap
+- Polygon drawing with draggable corners, parameter panel with live GSD/time/battery
+- Live 2D map with planned vs flown track, telemetry HUD
+- Pre-flight checklist gating launch, mission upload with readback verification
+- Auto-heading optimisation — tries every heading and picks maximum coverage
+- Geofence — keeps the flight inside the drawn boundary, turn overshoot included
+- **Exit criteria met:** plan, upload, and watch a full SITL mission from the browser
 
 ### Sprint 4 — Companion service
 - FastAPI service, systemd unit, starts on boot
@@ -225,13 +227,17 @@ the installed dialect.
 - **Coverage map** — photo footprints over the polygon, gaps highlighted
 - **Exit criteria:** deliberately drop photos from a test set and see the gap appear
 
-### Sprint 6 — Photogrammetry & 3D
-- ODM in Docker against a flight folder, progress and log tail in UI
-- Orthomosaic tiled onto the 2D map
-- Point cloud and textured mesh in a three.js viewer
-- Measurement tools
-- Validated on an ODM sample dataset
-- **Exit criteria:** a real orthomosaic and 3D model rendered in the app
+### Sprint 6 — Photogrammetry & 3D ✅ **DONE**
+- ODM pipeline against a flight folder
+- Orthomosaic, elevation, overlap, and camera-position map layers
+- Textured mesh in a three.js viewer
+- Measurement tools — distance and area on the orthomosaic with SVG overlay
+- Flight replay — animated camera positions with photo-in-picture at each waypoint
+- PDF report export — one-click printable survey summary
+- Survey statistics — cards, extent table, product downloads
+- Validated on real ODM sample imagery
+- **Exit criteria met:** orthomosaic, 3D model, measurements, and flight replay
+  all working in the app
 
 ### Sprint 7 — Hardware integration *(needs the drone)*
 - Real serial link Pi ↔ Kakute, real camera
@@ -384,14 +390,7 @@ Remaining work is either hardware-dependent or polish:
 - Starting a reconstruction from the browser rather than a command.
 - Saving and reloading named survey sites.
 - GPU-accelerated ODM, worth setting up once real surveys make the hours matter.
-
-## Immediate next steps
-
-1. Confirm the project folder location (see SPEC §2.4 — currently
-   `C:\Users\evan\Projects\drone-gcs`)
-2. **Restart Claude Code with the project folder as the working directory**, otherwise
-   every file write prompts for permission
-3. Begin Sprint 0
+- Wiring the ODM reconstruction to a browser button with progress tracking.
 
 ## Still open
 

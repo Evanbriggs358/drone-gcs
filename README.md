@@ -20,6 +20,8 @@ offloaded, reconstructed, and viewed as an orthomosaic and 3D model.
 | Component | State |
 |---|---|
 | Survey planning — grids, GSD, spacing, endurance | ✅ Working |
+| Auto-heading optimisation for maximum coverage | ✅ Working |
+| Geofence — keep-inside boundary with turn overshoot | ✅ Working |
 | Ground station UI — map, planning, pre-flight, live tracking | ✅ Working |
 | Mission build, upload, and readback verification | ✅ Working |
 | Flying a full mission (ArduPilot SITL) | ✅ Verified |
@@ -27,10 +29,11 @@ offloaded, reconstructed, and viewed as an orthomosaic and 3D model.
 | Resumable photo offload | ✅ Verified |
 | Coverage-gap detection | ✅ Working |
 | Photogrammetry pipeline and 3D viewer | ✅ Verified on real imagery |
+| Results — measurement tools, flight replay, PDF export | ✅ Working |
 | Flight-log diagnostics | ✅ Working |
 | Real aircraft | ⬜ Awaiting hardware |
 
-265 tests passing.
+297 tests passing.
 
 **The one piece never executed** is the Raspberry Pi camera driver, which cannot run
 off a Pi. See [PLAN.md](PLAN.md) for what else moves from simulator to aircraft, and
@@ -85,6 +88,16 @@ battery. One timed hover calibrates the model to measured reality.
 **Coverage gaps are found before you leave the site.** Every survey has a thin
 perimeter, so only under-covered ground *surrounded by good coverage* is reported —
 including ground photographed zero times, which is the case that matters most.
+
+**The grid heading is chosen automatically.** When stay-inside-the-boundary is
+enabled, the planner tries every heading from 0–179° and picks the one that
+maximises total flight-line length after the inset. This gets the most coverage out
+of the weakest outer lines without manual tuning.
+
+**Results are inspectable, not just viewable.** The reconstruction viewer includes
+measurement tools (distance and area on the orthomosaic), a flight replay that
+animates the camera positions with the captured photo at each waypoint, and a
+one-click PDF report export.
 
 ## Documentation
 

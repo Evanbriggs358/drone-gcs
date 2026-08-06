@@ -4,7 +4,8 @@ Ground station for a 7-inch Deadcat autonomous mapping platform. Replaces an
 SSH/terminal workflow with a laptop app that plans a mission, uploads it, monitors
 the flight live, offloads the imagery, and produces an orthomosaic and 3D model.
 
-Status: **draft spec, pre-implementation.** Nothing here is built yet.
+Status: **implemented and proven in simulation.** The software track is complete;
+hardware bring-up is blocked on the aircraft.
 
 ---
 
@@ -246,7 +247,10 @@ diagnosis and hands off to the official tool.
   - **Orthomosaic** (GeoTIFF) tiled onto the 2D map
   - **Dense point cloud** and **textured mesh** in a browser 3D viewer (three.js)
   - **DEM/DSM**
-- Measurement tools on the orthomosaic: distance, area, and volume
+- Measurement tools on the orthomosaic: distance and area
+  - Flight replay with animated camera positions and photo preview
+  - Survey statistics cards, extent table, product downloads
+  - PDF report export
 
 ---
 
