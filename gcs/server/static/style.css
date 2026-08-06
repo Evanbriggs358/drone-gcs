@@ -268,14 +268,18 @@ button.full { width: 100%; margin-top: 8px; }
 .check.warn { border-left-color: var(--warn); }
 .check.bad { border-left-color: var(--bad); }
 
-/* Live aircraft position. A triangle so heading is readable at a glance. */
-.aircraft {
+/* Live aircraft position. A triangle so heading is readable at a glance.
+   The outer element is positioned by Leaflet; only the inner arrow rotates. */
+.aircraft { width: 18px; height: 18px; }
+.aircraft-arrow {
   width: 0;
   height: 0;
+  margin: 1px auto 0;
   border-left: 8px solid transparent;
   border-right: 8px solid transparent;
   border-bottom: 16px solid var(--good);
   filter: drop-shadow(0 0 3px rgba(0, 0, 0, .8));
+  transform-origin: 50% 60%;
 }
 
 .detail-table { width: 100%; font-size: 12.5px; }

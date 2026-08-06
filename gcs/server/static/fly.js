@@ -10,6 +10,7 @@
 
   const POLL_MS = 2000;          // faster than the 5 s the brief asked for
   const STALE_AFTER_MS = 12000;  // after this, say so plainly
+  const MAX_TRACK_POINTS = 5000; // roughly three hours of movement at this rate
 
   const fly = {
     connected: false,
@@ -18,6 +19,7 @@
     track: null,
     trackPoints: [],
     timer: null,
+    polling: false,
   };
 
   const el = (id) => document.getElementById(id);
@@ -96,11 +98,19 @@
   }
 
   async function poll() {
+    // A slow or hanging request must not let the next tick start another. On a
+    // degraded link requests take longer than the interval, and without this
+    // they pile up until the browser is doing nothing else.
+    if (fly.polling) return;
+    fly.polling = true;
+
     let data;
     try {
       data = await (await fetch("/api/companion/status")).json();
     } catch {
       return showStale();
+    } finally {
+      fly.polling = false;
     }
 
     if (!data.connected) return showStale(data.error);
@@ -152,7 +162,16 @@
 
     if (!fly.marker) {
       fly.marker = L.marker(position, {
-        icon: L.divIcon({ className: "aircraft", iconSize: [18, 18], iconAnchor: [9, 9] }),
+        // The arrow lives in a child element. Leaflet owns the marker's own
+        // transform for positioning, so rotating that fights it — and writing
+        // to it repeatedly appends rather than replaces, which grows the style
+        // string without limit until the renderer stalls.
+        icon: L.divIcon({
+          className: "aircraft",
+          html: '<div class="aircraft-arrow"></div>',
+          iconSize: [18, 18],
+          iconAnchor: [9, 9],
+        }),
         zIndexOffset: 2000,
       }).addTo(map);
       fly.track = L.polyline([], { color: "#3fb950", weight: 2 }).addTo(map);
@@ -161,8 +180,8 @@
 
     fly.marker.setLatLng(position);
     if (v.heading_deg != null) {
-      const icon = fly.marker.getElement();
-      if (icon) icon.style.transform += ` rotate(${v.heading_deg}deg)`;
+      const arrow = fly.marker.getElement()?.querySelector(".aircraft-arrow");
+      if (arrow) arrow.style.transform = `rotate(${v.heading_deg}deg)`;
     }
 
     // Only record real movement, so a stationary aircraft does not accumulate
@@ -170,6 +189,12 @@
     const last = fly.trackPoints[fly.trackPoints.length - 1];
     if (!last || Math.abs(last[0] - v.lat) > 1e-6 || Math.abs(last[1] - v.lon) > 1e-6) {
       fly.trackPoints.push(position);
+      // Bound the track. A long survey would otherwise grow it without limit,
+      // and redrawing a polyline of many thousands of points every couple of
+      // seconds gets expensive.
+      if (fly.trackPoints.length > MAX_TRACK_POINTS) {
+        fly.trackPoints.splice(0, fly.trackPoints.length - MAX_TRACK_POINTS);
+      }
       fly.track.setLatLngs(fly.trackPoints);
     }
   }
