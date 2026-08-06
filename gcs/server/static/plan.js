@@ -11,6 +11,7 @@
     vertices: [],
     polygon: null,
     grid: null,
+    fence: null,
     photoLayer: null,
     markers: [],
     pending: null,
@@ -138,6 +139,7 @@
     pattern: document.getElementById("in-pattern"),
     weight: document.getElementById("in-weight"),
     hover: document.getElementById("in-hover"),
+    keepInside: document.getElementById("in-keep-inside"),
   };
 
   const outputs = {
@@ -194,6 +196,7 @@
       pattern: inputs.pattern.value,
       all_up_weight_kg: Number(inputs.weight.value),
       measured_hover_min: inputs.hover.value ? Number(inputs.hover.value) : null,
+      keep_inside: inputs.keepInside.checked,
     };
 
     let plan;
@@ -219,7 +222,8 @@
   function clearPlan() {
     if (state.grid) map.removeLayer(state.grid);
     if (state.photoLayer) map.removeLayer(state.photoLayer);
-    state.grid = state.photoLayer = null;
+    if (state.fence) map.removeLayer(state.fence);
+    state.grid = state.photoLayer = state.fence = null;
   }
 
   function drawPlan(plan) {
@@ -231,6 +235,29 @@
       lines.push([plan.waypoints[i], plan.waypoints[i + 1]]);
     }
     state.grid = L.polyline(lines, { color: "#ffcc44", weight: 2, opacity: 0.9 }).addTo(map);
+
+    // The geofence the aircraft will be given. Drawn dashed and red so it reads
+    // as a limit rather than part of the plan, and sitting outside the flight
+    // lines because turns overshoot the last waypoint.
+    if (plan.fence) {
+      const enclosed = plan.fence.encloses_flight;
+      state.fence = L.polygon(plan.fence.vertices, {
+        // Green when the flight genuinely fits inside; red when waypoints spill
+        // out and the fence would abort the mission.
+        color: enclosed ? "#3fb950" : "#f85149",
+        weight: 2,
+        dashArray: "8 6",
+        fill: false,
+      })
+        .addTo(map)
+        .bindTooltip(
+          enclosed
+            ? `Geofence — the whole flight stays inside. Ceiling ${plan.fence.max_altitude_m} m.`
+            : `Geofence — ${plan.fence.waypoints_outside} waypoints fall OUTSIDE. ` +
+              "This would abort the mission.",
+          { sticky: true }
+        );
+    }
 
     // Photo positions, drawn small so a few hundred stay legible.
     state.photoLayer = L.layerGroup(

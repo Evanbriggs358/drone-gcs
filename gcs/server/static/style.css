@@ -145,6 +145,17 @@ button.secondary:hover { border-color: var(--accent); }
   font-size: 13px;
 }
 
+.check-label {
+  display: flex !important;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px !important;
+  cursor: pointer;
+  color: var(--text) !important;
+  font-size: 13px !important;
+}
+.check-label input { accent-color: var(--accent); width: 15px; height: 15px; }
+
 .plan-stats.muted { color: var(--muted); font-size: 12.5px; }
 
 .stat-grid {

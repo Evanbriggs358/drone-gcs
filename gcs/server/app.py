@@ -28,6 +28,7 @@ from ..planning import (
     SurveyParams,
     plan_survey,
 )
+from ..link.fence import build_fence, build_fence_around_waypoints, contains
 from ..offload import CompanionClient, CompanionError
 from ..processing.odm import find_products
 
@@ -189,6 +190,9 @@ class PlanRequest(BaseModel):
     heading_deg: float = 0.0
     pattern: str = "nadir"
     camera: str | None = None
+    #: Hold the entire flight inside the drawn boundary, turn overshoot included.
+    #: On by default: a drawn boundary usually means real obstacles.
+    keep_inside: bool = True
 
     # -- aircraft, for endurance analysis --
     all_up_weight_kg: float = Field(default=1.6, gt=0.2, le=25)
@@ -234,6 +238,7 @@ def make_plan(request: PlanRequest) -> dict:
         ground_speed_ms=request.ground_speed_ms,
         heading_deg=request.heading_deg,
         pattern=pattern,
+        keep_inside=request.keep_inside,
     )
 
     airframe = replace(DEADCAT_7IN, all_up_weight_kg=request.all_up_weight_kg)
@@ -254,9 +259,35 @@ def make_plan(request: PlanRequest) -> dict:
     except ValueError as error:
         raise HTTPException(400, str(error))
 
+    # Preview the geofence the aircraft will be given, so the boundary is
+    # visible while planning rather than a surprise after upload.
+    ceiling = request.altitude_m + 30.0
+    try:
+        if request.keep_inside:
+            # The drawn boundary itself, concavities intact.
+            fence = build_fence([tuple(p) for p in request.polygon], ceiling)
+        else:
+            fence = build_fence_around_waypoints(
+                [(w.lat, w.lon) for w in plan.waypoints], max_altitude_m=ceiling
+            )
+
+        outside = [
+            w for w in plan.waypoints if not contains(fence, (w.lat, w.lon))
+        ]
+        fence_preview = {
+            "vertices": [[lat, lon] for lat, lon in fence.vertices],
+            "margin_m": fence.margin_m,
+            "max_altitude_m": fence.max_altitude_m,
+            "encloses_flight": not outside,
+            "waypoints_outside": len(outside),
+        }
+    except ValueError:
+        fence_preview = None
+
     return {
         "waypoints": [[w.lat, w.lon] for w in plan.waypoints],
         "photo_points": [[lat, lon] for lat, lon in plan.photo_points],
+        "fence": fence_preview,
         "stats": {
             "area_acres": round(plan.area_acres, 2),
             "gsd_cm_per_px": round(plan.gsd_cm_per_px, 2),
@@ -300,6 +331,8 @@ class MissionUpload(BaseModel):
     altitude_m: float
     trigger_distance_m: float
     home: tuple[float, float] | None = None
+    #: The drawn boundary, which becomes the geofence exactly.
+    boundary: list[tuple[float, float]] | None = None
 
 
 def _require_companion() -> CompanionClient:
@@ -367,6 +400,7 @@ def companion_mission(request: MissionUpload) -> dict:
             request.altitude_m,
             request.trigger_distance_m,
             list(request.home) if request.home else None,
+            [list(v) for v in request.boundary] if request.boundary else None,
         )
     except CompanionError as error:
         raise HTTPException(502, str(error))

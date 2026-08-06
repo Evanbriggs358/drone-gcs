@@ -146,6 +146,7 @@ class CompanionClient:
         altitude_m: float,
         trigger_distance_m: float,
         home: list[float] | None = None,
+        boundary: list[list[float]] | None = None,
     ) -> dict:
         """Ask the companion to write a mission to the flight controller."""
         payload = json.dumps({
@@ -153,6 +154,7 @@ class CompanionClient:
             "altitude_m": altitude_m,
             "trigger_distance_m": trigger_distance_m,
             "home": home,
+            "boundary": boundary,
         }).encode()
         request = urllib.request.Request(
             f"{self.base_url}/mission/upload",

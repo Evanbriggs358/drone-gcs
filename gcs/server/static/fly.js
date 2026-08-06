@@ -272,14 +272,29 @@
           altitude_m: Number(document.getElementById("in-altitude").value),
           trigger_distance_m: plan.stats.photo_spacing_m,
           home: plan.waypoints[0],
+          // The drawn boundary becomes the fence exactly, so obstacles routed
+          // around on the map are routed around in the air.
+          boundary: window.planner.state.vertices,
         }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.detail || "upload failed");
 
+      const fence = data.fence
+        ? data.fence.enabled
+          ? `<p class="check good"><b>Geofence active</b><span>${data.fence.vertices}
+             vertices, ${data.fence.margin_m} m beyond the flight path, ceiling
+             ${data.fence.max_altitude_m} m. The autopilot enforces this itself —
+             no link required.</span></p>`
+          : `<p class="check warn"><b>Fence stored but not fully enabled</b>
+             <span>Unconfirmed: ${data.fence.unconfirmed_parameters.join(", ")}.
+             Check these on the aircraft before flying.</span></p>`
+        : `<p class="check warn"><b>No geofence</b><span>The mission was uploaded
+           without a boundary.</span></p>`;
+
       result.innerHTML = `<p class="check good"><b>Mission uploaded</b>
         <span>${data.items} items, verified by readback. Camera every
-        ${data.trigger_distance_m} m.</span></p>`;
+        ${data.trigger_distance_m} m.</span></p>` + fence;
     } catch (error) {
       result.innerHTML = `<p class="check bad"><b>Upload failed</b>
         <span>${error.message || error}</span></p>`;

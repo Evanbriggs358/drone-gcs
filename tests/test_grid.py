@@ -134,7 +134,7 @@ class TestValidation:
 # SurveyParams is frozen, so variants are built by replacement.
 
 def replace_margin(p: SurveyParams, margin: float) -> SurveyParams:
-    return SurveyParams(**{**vars(p), "edge_margin_m": margin})
+    return SurveyParams(**{**vars(p), "edge_margin_m": margin, "keep_inside": False})
 
 
 def replace_pattern(p: SurveyParams, pattern: Pattern) -> SurveyParams:

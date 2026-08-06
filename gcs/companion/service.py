@@ -206,6 +206,16 @@ class MissionRequest(BaseModel):
     trigger_distance_m: float
     home: tuple[float, float] | None = None
 
+    #: The boundary as drawn, [latitude, longitude] pairs. Becomes the geofence
+    #: exactly — not a hull of the waypoints — because a drawn boundary usually
+    #: traces real obstacles.
+    boundary: list[tuple[float, float]] | None = None
+    #: Write an inclusion fence and enable it, so the autopilot enforces the
+    #: boundary itself with no link required.
+    fence: bool = True
+    #: Altitude ceiling. Defaults to the survey altitude plus headroom.
+    fence_max_altitude_m: float | None = None
+
 
 def _simulated_reasons() -> list[str]:
     """Why this is not a real aircraft, in words a pilot can act on.
@@ -385,11 +395,107 @@ def upload_mission_endpoint(request: MissionRequest) -> dict:
     if problems:
         raise HTTPException(502, "mission readback did not match: " + "; ".join(problems))
 
-    return {
+    result = {
         "items": len(items),
         "trigger_distance_m": request.trigger_distance_m,
         "verified": True,
+        "fence": None,
     }
+
+    if request.fence:
+        result["fence"] = _upload_fence(request)
+
+    return result
+
+
+def _upload_fence(request: MissionRequest) -> dict:
+    """Enclose the survey in an inclusion fence and switch it on.
+
+    Deliberately built from the flown waypoints rather than the drawn polygon:
+    the flight lines run past the polygon by the edge margin and the aircraft
+    overshoots further while turning, so a fence on the polygon would be
+    breached during a perfectly normal survey.
+    """
+    from ..link.fence import (
+        FENCE_ACTION_RTL,
+        FENCE_TYPE_ALT_AND_POLYGON,
+        build_fence,
+        build_fence_around_waypoints,
+        contains,
+        diff_fence,
+        download_fence,
+        upload_fence,
+    )
+
+    ceiling = request.fence_max_altitude_m or (request.altitude_m + 30.0)
+    waypoints = [tuple(w) for w in request.waypoints]
+
+    if request.boundary:
+        fence = build_fence([tuple(v) for v in request.boundary], ceiling)
+
+        # The boundary is only a safe fence if the flight actually fits inside
+        # it. Uploading one that clips the mission would abort a good survey
+        # partway through, which is how pilots learn to switch fences off.
+        outside = [w for w in waypoints if not contains(fence, w)]
+        if outside:
+            raise HTTPException(
+                422,
+                f"{len(outside)} of {len(waypoints)} waypoints fall outside the "
+                "drawn boundary, so this fence would abort the mission. Re-plan "
+                "with 'keep inside the boundary' enabled, or fly slower — the "
+                "turn overshoot grows with the square of speed.",
+            )
+    else:
+        # No boundary given: fall back to enclosing the waypoints.
+        fence = build_fence_around_waypoints(waypoints, max_altitude_m=ceiling)
+
+    try:
+        with worker.exclusive_link() as link:
+            upload_fence(link, fence)
+            stored = download_fence(link)
+
+            problems = diff_fence(fence, stored)
+            if problems:
+                raise HTTPException(
+                    502, "fence readback did not match: " + "; ".join(problems)
+                )
+
+            # Parameters, not mission items: the fence exists but does nothing
+            # until the autopilot is told to act on it.
+            applied = {
+                "FENCE_ENABLE": _set_param(link, "FENCE_ENABLE", 1),
+                "FENCE_TYPE": _set_param(link, "FENCE_TYPE", FENCE_TYPE_ALT_AND_POLYGON),
+                "FENCE_ACTION": _set_param(link, "FENCE_ACTION", FENCE_ACTION_RTL),
+                "FENCE_ALT_MAX": _set_param(link, "FENCE_ALT_MAX", ceiling),
+            }
+    except (RuntimeError, TimeoutError) as error:
+        raise HTTPException(502, f"fence upload failed: {error}")
+
+    unconfirmed = [name for name, ok in applied.items() if not ok]
+    return {
+        "vertices": fence.vertex_count,
+        "margin_m": fence.margin_m,
+        "max_altitude_m": ceiling,
+        "verified": True,
+        "enabled": not unconfirmed,
+        "unconfirmed_parameters": unconfirmed,
+    }
+
+
+def _set_param(link, name: str, value: float, timeout: float = 4.0) -> bool:
+    """Set a parameter and confirm the echo. Silent failure otherwise."""
+    from pymavlink import mavutil
+
+    link.mav.param_set_send(
+        link.target_system, link.target_component, name.encode(),
+        float(value), mavutil.mavlink.MAV_PARAM_TYPE_REAL32,
+    )
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        msg = link.recv_match(type="PARAM_VALUE", blocking=True, timeout=1.0)
+        if msg is not None and msg.param_id.strip("\x00") == name:
+            return abs(msg.param_value - value) < max(0.01, abs(value) * 0.001)
+    return False
 
 
 @app.get("/sessions")

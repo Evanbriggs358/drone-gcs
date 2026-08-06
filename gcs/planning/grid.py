@@ -45,12 +45,50 @@ class SurveyParams:
     #: Compass bearing of the flight lines, degrees clockwise from north.
     heading_deg: float = 0.0
     pattern: Pattern = Pattern.NADIR
-    #: Distance to extend each line past the polygon boundary. Without it the
-    #: outermost photos have neighbours on one side only, and the reconstruction
-    #: degrades around the edges of the survey area.
+
+    #: Keep the entire flight inside the drawn boundary, including the overshoot
+    #: when the aircraft decelerates into a turn.
+    #:
+    #: Default because a drawn boundary usually means something physical — trees,
+    #: wires, a property line — and flying outside it is not a data-quality
+    #: question but a crash. The cost is thinner coverage at the very edge, since
+    #: the outermost photos then have neighbours on one side only.
+    #:
+    #: Set False only when the boundary marks an area of interest with open space
+    #: around it, and better edge reconstruction is worth flying beyond it.
+    keep_inside: bool = True
+
+    #: How far to extend each line past the boundary. Ignored when
+    #: ``keep_inside`` is set, which insets instead.
     edge_margin_m: float = 15.0
+
+    #: Deceleration the aircraft achieves entering a turn. ArduPilot's default
+    #: waypoint acceleration is around 2.5 m/s^2.
+    turn_accel_ms2: float = 2.5
+    #: Radius at which the autopilot considers a waypoint reached and begins
+    #: turning, so the aircraft carries on this far past it.
+    waypoint_radius_m: float = 2.0
     #: Seconds lost decelerating, turning, and accelerating at each line end.
     turn_penalty_s: float = 6.0
+
+    @property
+    def turn_overshoot_m(self) -> float:
+        """How far past a line-end waypoint the aircraft actually travels.
+
+        Stopping distance at cruise plus the waypoint acceptance radius. At
+        8 m/s this is around 15 m; at 17 m/s nearer 60. Flight lines are held
+        this far inside the boundary so the overshoot lands on it rather than
+        beyond it.
+        """
+        return (
+            self.ground_speed_ms**2 / (2.0 * self.turn_accel_ms2)
+            + self.waypoint_radius_m
+        )
+
+    @property
+    def effective_margin_m(self) -> float:
+        """Signed distance applied to each line end. Negative shortens."""
+        return -self.turn_overshoot_m if self.keep_inside else self.edge_margin_m
 
 
 @dataclass(frozen=True)
@@ -126,7 +164,7 @@ def plan_survey(
     all_lines: list[tuple[Point, Point]] = []
     for heading in headings:
         all_lines.extend(
-            _flight_lines(local, heading, line_spacing, params.edge_margin_m)
+            _flight_lines(local, heading, line_spacing, params.effective_margin_m)
         )
 
     waypoints: list[Waypoint] = []
@@ -241,9 +279,25 @@ def _check(camera: Camera, params: SurveyParams, photo_spacing: float) -> list[s
             "low-texture ground such as grass, water, or fresh asphalt."
         )
 
-    if params.edge_margin_m <= 0:
+    if params.keep_inside:
         warnings.append(
-            "No edge margin: coverage will thin out at the polygon boundary."
+            f"Staying inside the boundary: flight lines stop "
+            f"{params.turn_overshoot_m:.0f} m short of the edge so the turn "
+            f"overshoot lands inside it. Coverage thins at the very perimeter."
+        )
+        # The inset grows with the square of speed, so a fast survey of a small
+        # area can lose most of it.
+        if params.turn_overshoot_m > 40.0:
+            warnings.append(
+                f"At {params.ground_speed_ms:.0f} m/s the aircraft needs "
+                f"{params.turn_overshoot_m:.0f} m to turn around, so a wide "
+                "strip of the boundary goes unflown. Slow down to reclaim it."
+            )
+    elif params.edge_margin_m > 0:
+        warnings.append(
+            f"Flight lines extend {params.edge_margin_m:.0f} m BEYOND the drawn "
+            "boundary for better edge coverage. Only safe if there is clear "
+            "space around the area."
         )
 
     return warnings
@@ -269,7 +323,13 @@ def _flight_lines(
     flip = False
     while y <= y_max:
         for x0, x1 in _scanline_spans(rotated, y):
-            a, b = (x0 - margin, y), (x1 + margin, y)
+            start, end = x0 - margin, x1 + margin
+            # A negative margin shortens the line. Where the polygon is narrower
+            # than twice the inset the line disappears entirely — correct, since
+            # there is no room to fly it and still turn inside the boundary.
+            if end - start < 1.0:
+                continue
+            a, b = (start, y), (end, y)
             if flip:
                 a, b = b, a
             lines.append((rotate(a, angle), rotate(b, angle)))
