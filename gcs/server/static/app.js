@@ -572,16 +572,12 @@ function drawMeasure() {
     const last = pts[pts.length - 1];
     html += `<text x="${last.x + 10}" y="${last.y - 10}" fill="#4aa3ff" font-size="13" font-weight="600">${formatDist(dist)}</text>`;
     readout.textContent = formatDist(dist);
-  } else if (measure.type === "area") {
-    if (pts.length >= 3 && !measure.active) {
-      const a = computeArea(pts);
-      const cx = pts.reduce((s, p) => s + p.x, 0) / pts.length;
-      const cy = pts.reduce((s, p) => s + p.y, 0) / pts.length;
-      html += `<text x="${cx}" y="${cy}" fill="#4aa3ff" font-size="13" font-weight="600" text-anchor="middle">${formatArea(a)}</text>`;
-      readout.textContent = formatArea(a);
-    } else if (pts.length >= 2) {
-      readout.textContent = "Perimeter: " + formatDist(computeDistance(pts));
-    }
+  } else if (measure.type === "area" && pts.length >= 3) {
+    const a = computeArea(pts);
+    const cx = pts.reduce((s, p) => s + p.x, 0) / pts.length;
+    const cy = pts.reduce((s, p) => s + p.y, 0) / pts.length;
+    html += `<text x="${cx}" y="${cy}" fill="#4aa3ff" font-size="13" font-weight="600" text-anchor="middle">${formatArea(a)}</text>`;
+    readout.textContent = formatArea(a);
   }
 
   svg.innerHTML = html;
