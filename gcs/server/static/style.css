@@ -608,9 +608,27 @@ td:first-child { color: var(--muted); width: 45%; }
 /* -- flight replay ------------------------------------------------------ */
 
 #view-replay.active { flex-direction: column; }
-#replay-container { display: none; flex: 1; flex-direction: column; min-height: 0; }
+#replay-container { display: none; flex: 1; flex-direction: column; min-height: 0; position: relative; }
 #replay-container.ready { display: flex; }
 #replay-map { flex: 1; min-height: 0; }
+
+#replay-pip {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 1000;
+  width: 240px;
+  background: var(--panel);
+  border: 2px solid var(--line);
+  border-radius: 6px;
+  overflow: hidden;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+}
+#replay-pip img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
 
 #replay-controls {
   padding: 12px 20px;

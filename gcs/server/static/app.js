@@ -629,7 +629,9 @@ async function showReplay(project) {
   if (replay.map) { replay.map.remove(); replay.map = null; }
   replay.shots = [];
   replay.initialized = false;
+  replay.lastPhotoIdx = -1;
   pauseReplay();
+  document.getElementById("replay-pip").classList.add("hidden");
 
   container.classList.remove("ready");
   status.classList.remove("hidden");
@@ -694,11 +696,14 @@ function buildReplayMap() {
   }).addTo(map);
 
   replay.map = map;
+  replay.lastPhotoIdx = -1;
 
   const scrubber = document.getElementById("replay-scrubber");
   scrubber.max = shots.length - 1;
   scrubber.value = 0;
   replay.currentIndex = 0;
+
+  document.getElementById("replay-pip").classList.remove("hidden");
   updateReplayPosition(0);
 }
 
@@ -711,6 +716,15 @@ function updateReplayPosition(index) {
 
   if (replay.marker) replay.marker.setLatLng([coords[1], coords[0]]);
   document.getElementById("replay-scrubber").value = idx;
+
+  if (idx !== replay.lastPhotoIdx) {
+    replay.lastPhotoIdx = idx;
+    const filename = shot.properties.filename;
+    if (filename && state.project) {
+      document.getElementById("replay-photo").src =
+        `/files/${state.project.name}/images/${filename}`;
+    }
+  }
 
   const props = shot.properties;
   const time = props.capture_time ? new Date(props.capture_time * 1000).toLocaleString() : "";
