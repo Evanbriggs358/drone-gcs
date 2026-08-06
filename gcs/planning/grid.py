@@ -164,7 +164,11 @@ def plan_survey(
     line_spacing = camera.line_spacing_m(params.altitude_m, params.side_overlap)
     photo_spacing = camera.photo_spacing_m(params.altitude_m, params.front_overlap)
 
-    heading = optimal_heading_deg(local) if params.auto_heading else params.heading_deg
+    heading = (
+        optimal_heading_deg(local, line_spacing, params.effective_margin_m)
+        if params.auto_heading
+        else params.heading_deg
+    )
     headings = [heading]
     if params.pattern is Pattern.CROSSHATCH:
         headings.append(heading + 90.0)
@@ -396,37 +400,27 @@ def _path_length(lines: list[tuple[Point, Point]]) -> float:
     return total
 
 
-def optimal_heading_deg(polygon: list[Point]) -> float:
-    """Heading that aligns flight lines with the polygon's longest axis.
+def optimal_heading_deg(
+    polygon: list[Point], line_spacing: float, margin: float
+) -> float:
+    """Heading that maximises total flight-line coverage after the inset.
 
-    Minimises the polygon's width perpendicular to the flight direction, which
-    means fewer, longer lines and the smallest possible edge-strip area. The
-    outer lines — the weakest for coverage when keep_inside is on — benefit
-    most because there are fewer of them relative to interior lines.
-
-    Tries every polygon edge direction (the optimum always coincides with one)
-    and returns the best heading in [0, 180) degrees clockwise from north.
+    Tries every integer heading from 0 to 179 and picks the one where the
+    actual flight lines — clipped to the polygon and shortened by the margin —
+    cover the most total length.  Total covered area is proportional to total
+    line length times line spacing, so maximising line length maximises
+    coverage.
     """
     best_heading = 0.0
-    best_width = float("inf")
+    best_length = -1.0
 
-    n = len(polygon)
-    for i in range(n):
-        x1, y1 = polygon[i]
-        x2, y2 = polygon[(i + 1) % n]
-        dx, dy = x2 - x1, y2 - y1
-        if dx == 0.0 and dy == 0.0:
-            continue
+    for deg in range(180):
+        lines = _flight_lines(polygon, float(deg), line_spacing, margin)
+        total = sum(
+            hypot(b[0] - a[0], b[1] - a[1]) for a, b in lines
+        )
+        if total > best_length:
+            best_length = total
+            best_heading = float(deg)
 
-        edge_angle = atan2(dx, dy)
-
-        # Project every vertex onto the axis perpendicular to this edge.
-        perp_x, perp_y = cos(edge_angle), -sin(edge_angle)
-        projections = [px * perp_x + py * perp_y for px, py in polygon]
-        width = max(projections) - min(projections)
-
-        if width < best_width:
-            best_width = width
-            best_heading = degrees(edge_angle) % 180.0
-
-    return round(best_heading, 1)
+    return best_heading
