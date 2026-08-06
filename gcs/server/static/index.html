@@ -135,6 +135,7 @@
     <div id="tabs" role="tablist">
       <button class="tab active" data-view="model" role="tab">3D model</button>
       <button class="tab" data-view="map" role="tab">Maps</button>
+      <button class="tab" data-view="replay" role="tab">Flight replay</button>
       <button class="tab" data-view="stats" role="tab">Survey data</button>
     </div>
 
@@ -152,11 +153,43 @@
           <img id="layer-legend" class="legend hidden" alt="Legend">
         </div>
       </div>
+      <div id="measure-bar" class="measure-bar hidden">
+        <button id="btn-measure-dist" class="secondary">Measure distance</button>
+        <button id="btn-measure-area" class="secondary">Measure area</button>
+        <button id="btn-measure-clear" class="secondary">Clear</button>
+        <span id="measure-readout"></span>
+      </div>
       <div id="map-status" class="status">Select a reconstruction</div>
-      <div id="map-frame"><img id="ortho-image" alt=""></div>
+      <div id="map-frame">
+        <img id="ortho-image" alt="">
+        <svg id="measure-svg" class="hidden"></svg>
+      </div>
+    </section>
+
+    <section id="view-replay" class="view">
+      <div id="replay-status" class="status">Select a reconstruction</div>
+      <div id="replay-container">
+        <div id="replay-map"></div>
+        <div id="replay-controls">
+          <div id="replay-info"></div>
+          <input type="range" id="replay-scrubber" min="0" max="0" value="0" step="1">
+          <div class="replay-buttons">
+            <button id="btn-replay-play" class="secondary">Play</button>
+            <select id="replay-speed">
+              <option value="1">1x</option>
+              <option value="2">2x</option>
+              <option value="5">5x</option>
+              <option value="10">10x</option>
+            </select>
+          </div>
+        </div>
+      </div>
     </section>
 
     <section id="view-stats" class="view">
+      <div id="stats-toolbar" class="stats-toolbar hidden">
+        <button id="btn-export" class="secondary">Export report</button>
+      </div>
       <div id="stats-body" class="status">Select a reconstruction</div>
     </section>
   </main>

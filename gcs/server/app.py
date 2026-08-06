@@ -175,6 +175,23 @@ def get_stats(project: str) -> dict:
     }
 
 
+@app.get("/api/projects/{project}/shots")
+def get_shots(project: str) -> list:
+    """Camera positions from the reconstruction, sorted by capture time."""
+    import json as _json
+
+    project_dir = (DATA_ROOT / project).resolve()
+    if not str(project_dir).startswith(str(DATA_ROOT.resolve())):
+        raise HTTPException(400, "invalid project")
+    geojson_path = project_dir / "odm_report" / "shots.geojson"
+    if not geojson_path.is_file():
+        return []
+    data = _json.loads(geojson_path.read_text())
+    features = data.get("features", [])
+    features.sort(key=lambda f: f.get("properties", {}).get("capture_time", 0))
+    return features
+
+
 # -- mission planning ------------------------------------------------------
 
 

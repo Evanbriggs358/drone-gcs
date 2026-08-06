@@ -571,3 +571,90 @@ td:first-child { color: var(--muted); width: 45%; }
   font-size: 13px;
 }
 .downloads a:hover { border-color: var(--accent); }
+
+/* -- measurement tools -------------------------------------------------- */
+
+.measure-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 20px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+}
+.measure-bar button.active {
+  border-color: var(--accent);
+  color: var(--text);
+  background: #16283c;
+}
+#measure-readout {
+  margin-left: auto;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+}
+
+#measure-svg {
+  position: absolute;
+  z-index: 1;
+  pointer-events: none;
+}
+#measure-svg.active {
+  pointer-events: auto;
+  cursor: crosshair;
+}
+
+/* -- flight replay ------------------------------------------------------ */
+
+#view-replay.active { flex-direction: column; }
+#replay-container { display: none; flex: 1; flex-direction: column; min-height: 0; }
+#replay-container.ready { display: flex; }
+#replay-map { flex: 1; min-height: 0; }
+
+#replay-controls {
+  padding: 12px 20px;
+  background: var(--panel);
+  border-top: 1px solid var(--line);
+}
+#replay-info {
+  display: flex;
+  gap: 16px;
+  font-size: 13px;
+  margin-bottom: 8px;
+  min-height: 20px;
+}
+#replay-info span { color: var(--text); }
+#replay-info span:first-child { font-weight: 600; }
+#replay-info span:not(:first-child) { color: var(--muted); }
+
+#replay-scrubber {
+  width: 100%;
+  accent-color: var(--accent);
+  margin-bottom: 8px;
+}
+
+.replay-buttons {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.replay-buttons select {
+  background: var(--panel-2);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  padding: 7px 10px;
+  font: inherit;
+  font-size: 13px;
+}
+
+/* -- stats toolbar ------------------------------------------------------ */
+
+.stats-toolbar {
+  display: flex;
+  gap: 8px;
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+}

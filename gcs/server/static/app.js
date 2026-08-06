@@ -3,7 +3,7 @@ import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { OBJLoader } from "three/addons/loaders/OBJLoader.js";
 import { MTLLoader } from "three/addons/loaders/MTLLoader.js";
 
-const state = { project: null, view: "model", scene: null };
+const state = { project: null, view: "model", scene: null, stats: null };
 
 // -- project list ---------------------------------------------------------
 
@@ -52,6 +52,7 @@ function selectProject(project) {
   showMaps(project);
   showStats(project);
   showModel(project);
+  showReplay(project);
 }
 
 // -- tabs -----------------------------------------------------------------
@@ -112,11 +113,14 @@ function showMaps(project) {
   buttons.innerHTML = "";
   if (!available.length) {
     bar.classList.add("hidden");
+    document.getElementById("measure-bar").classList.add("hidden");
     setLayer(project, null);
     return;
   }
 
   bar.classList.remove("hidden");
+  document.getElementById("measure-bar").classList.remove("hidden");
+  clearMeasure();
   for (const layer of available) {
     const button = document.createElement("button");
     button.textContent = layer.label;
@@ -172,6 +176,7 @@ function setLayer(project, layer) {
 async function showStats(project) {
   const body = document.getElementById("stats-body");
   body.textContent = "Loading…";
+  document.getElementById("stats-toolbar").classList.add("hidden");
 
   let stats;
   try {
@@ -246,6 +251,9 @@ async function showStats(project) {
     <table>${rows}</table>
     <h3>Products</h3>
     <div class="downloads">${files}</div>`;
+
+  state.stats = stats;
+  document.getElementById("stats-toolbar").classList.remove("hidden");
 }
 
 function card(label, value, sub, tone = "") {
@@ -429,5 +437,396 @@ function buildScene(canvas, object) {
     },
   };
 }
+
+// -- measurement tools ----------------------------------------------------
+
+const measure = { active: false, type: null, points: [] };
+
+function syncMeasureSvg() {
+  const img = document.getElementById("ortho-image");
+  const svg = document.getElementById("measure-svg");
+  const frame = document.getElementById("map-frame");
+  if (!img.naturalWidth || !frame) return;
+  const imgRect = img.getBoundingClientRect();
+  const frameRect = frame.getBoundingClientRect();
+  svg.style.left = (imgRect.left - frameRect.left + frame.scrollLeft) + "px";
+  svg.style.top = (imgRect.top - frameRect.top + frame.scrollTop) + "px";
+  svg.style.width = imgRect.width + "px";
+  svg.style.height = imgRect.height + "px";
+  svg.setAttribute("viewBox", `0 0 ${imgRect.width} ${imgRect.height}`);
+}
+
+function startMeasure(type) {
+  clearMeasure();
+  measure.active = true;
+  measure.type = type;
+  const svg = document.getElementById("measure-svg");
+  syncMeasureSvg();
+  svg.classList.remove("hidden");
+  svg.classList.add("active");
+  document.getElementById(type === "distance" ? "btn-measure-dist" : "btn-measure-area")
+    .classList.add("active");
+  document.getElementById("measure-readout").textContent = "Click to place points";
+}
+
+function clearMeasure() {
+  measure.active = false;
+  measure.type = null;
+  measure.points = [];
+  const svg = document.getElementById("measure-svg");
+  if (svg) {
+    svg.innerHTML = "";
+    svg.classList.add("hidden");
+    svg.classList.remove("active");
+  }
+  const dist = document.getElementById("btn-measure-dist");
+  const area = document.getElementById("btn-measure-area");
+  if (dist) dist.classList.remove("active");
+  if (area) area.classList.remove("active");
+  const readout = document.getElementById("measure-readout");
+  if (readout) readout.textContent = "";
+}
+
+function finishMeasure() {
+  measure.active = false;
+  const svg = document.getElementById("measure-svg");
+  svg.classList.remove("active");
+  document.getElementById("btn-measure-dist").classList.remove("active");
+  document.getElementById("btn-measure-area").classList.remove("active");
+  drawMeasure();
+}
+
+function getMeterScale() {
+  const img = document.getElementById("ortho-image");
+  const svgEl = document.getElementById("measure-svg");
+  if (!state.stats || !state.stats.extent_m || !img.naturalWidth) return null;
+  const rect = svgEl.getBoundingClientRect();
+  if (!rect.width || !rect.height) return null;
+  return {
+    mx: state.stats.extent_m.width / rect.width,
+    my: state.stats.extent_m.height / rect.height,
+  };
+}
+
+function computeDistance(points) {
+  const scale = getMeterScale();
+  if (!scale) return 0;
+  let total = 0;
+  for (let i = 1; i < points.length; i++) {
+    const dx = (points[i].x - points[i - 1].x) * scale.mx;
+    const dy = (points[i].y - points[i - 1].y) * scale.my;
+    total += Math.sqrt(dx * dx + dy * dy);
+  }
+  return total;
+}
+
+function computeArea(points) {
+  const scale = getMeterScale();
+  if (!scale || points.length < 3) return 0;
+  let area = 0;
+  for (let i = 0; i < points.length; i++) {
+    const j = (i + 1) % points.length;
+    area += (points[i].x * scale.mx) * (points[j].y * scale.my);
+    area -= (points[j].x * scale.mx) * (points[i].y * scale.my);
+  }
+  return Math.abs(area) / 2;
+}
+
+function formatDist(m) {
+  return m >= 1000 ? (m / 1000).toFixed(2) + " km" : m.toFixed(1) + " m";
+}
+
+function formatArea(m2) {
+  if (m2 >= 1000) return m2.toFixed(0) + " m² (" + (m2 / 4046.86).toFixed(2) + " acres)";
+  return m2.toFixed(1) + " m²";
+}
+
+function drawMeasure() {
+  const svg = document.getElementById("measure-svg");
+  const readout = document.getElementById("measure-readout");
+  const pts = measure.points;
+
+  if (!pts.length) {
+    svg.innerHTML = "";
+    readout.textContent = measure.active ? "Click to place points" : "";
+    return;
+  }
+
+  let html = "";
+
+  if (pts.length >= 2) {
+    const pointStr = pts.map(p => `${p.x},${p.y}`).join(" ");
+    if (measure.type === "area") {
+      html += `<polygon points="${pointStr}" fill="rgba(74,163,255,0.15)" stroke="#4aa3ff" stroke-width="2"/>`;
+    } else {
+      html += `<polyline points="${pointStr}" fill="none" stroke="#4aa3ff" stroke-width="2"/>`;
+    }
+  }
+
+  for (const p of pts) {
+    html += `<circle cx="${p.x}" cy="${p.y}" r="4" fill="#4aa3ff" stroke="#0e1116" stroke-width="1.5"/>`;
+  }
+
+  if (measure.type === "distance" && pts.length >= 2) {
+    const dist = computeDistance(pts);
+    const last = pts[pts.length - 1];
+    html += `<text x="${last.x + 10}" y="${last.y - 10}" fill="#4aa3ff" font-size="13" font-weight="600">${formatDist(dist)}</text>`;
+    readout.textContent = formatDist(dist);
+  } else if (measure.type === "area") {
+    if (pts.length >= 3 && !measure.active) {
+      const a = computeArea(pts);
+      const cx = pts.reduce((s, p) => s + p.x, 0) / pts.length;
+      const cy = pts.reduce((s, p) => s + p.y, 0) / pts.length;
+      html += `<text x="${cx}" y="${cy}" fill="#4aa3ff" font-size="13" font-weight="600" text-anchor="middle">${formatArea(a)}</text>`;
+      readout.textContent = formatArea(a);
+    } else if (pts.length >= 2) {
+      readout.textContent = "Perimeter: " + formatDist(computeDistance(pts));
+    }
+  }
+
+  svg.innerHTML = html;
+}
+
+document.getElementById("measure-svg").addEventListener("click", (e) => {
+  if (!measure.active) return;
+  const rect = e.currentTarget.getBoundingClientRect();
+  measure.points.push({ x: e.clientX - rect.left, y: e.clientY - rect.top });
+  drawMeasure();
+});
+
+document.getElementById("measure-svg").addEventListener("dblclick", (e) => {
+  e.preventDefault();
+  if (!measure.active) return;
+  if (measure.points.length > 1) measure.points.pop();
+  if (measure.type === "distance" && measure.points.length >= 2) finishMeasure();
+  else if (measure.type === "area" && measure.points.length >= 3) finishMeasure();
+});
+
+document.getElementById("btn-measure-dist").addEventListener("click", () => startMeasure("distance"));
+document.getElementById("btn-measure-area").addEventListener("click", () => startMeasure("area"));
+document.getElementById("btn-measure-clear").addEventListener("click", clearMeasure);
+
+document.getElementById("ortho-image").addEventListener("load", syncMeasureSvg);
+new ResizeObserver(syncMeasureSvg).observe(document.getElementById("map-frame"));
+
+// -- flight replay --------------------------------------------------------
+
+const replay = {
+  map: null,
+  shots: [],
+  marker: null,
+  playing: false,
+  animFrame: null,
+  currentIndex: 0,
+  speed: 1,
+  initialized: false,
+};
+
+async function showReplay(project) {
+  const status = document.getElementById("replay-status");
+  const container = document.getElementById("replay-container");
+
+  if (replay.map) { replay.map.remove(); replay.map = null; }
+  replay.shots = [];
+  replay.initialized = false;
+  pauseReplay();
+
+  container.classList.remove("ready");
+  status.classList.remove("hidden");
+  status.textContent = "Loading flight data…";
+
+  let shots;
+  try {
+    shots = await (await fetch(`/api/projects/${project.name}/shots`)).json();
+  } catch {
+    status.textContent = "Could not load flight data";
+    return;
+  }
+
+  if (!shots.length) {
+    status.textContent = "No flight data available for this reconstruction";
+    return;
+  }
+
+  replay.shots = shots;
+  status.classList.add("hidden");
+  container.classList.add("ready");
+
+  if (state.view === "replay") setTimeout(() => initReplayMap(), 50);
+}
+
+function initReplayMap() {
+  if (replay.initialized || !replay.shots.length) return;
+  replay.initialized = true;
+  buildReplayMap();
+}
+
+function buildReplayMap() {
+  const shots = replay.shots;
+  const map = L.map("replay-map", { preferCanvas: true });
+
+  L.tileLayer(
+    "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+    { attribution: "Esri", maxZoom: 19 }
+  ).addTo(map);
+
+  const latlngs = shots.map(s => [s.geometry.coordinates[1], s.geometry.coordinates[0]]);
+  map.fitBounds(L.latLngBounds(latlngs).pad(0.1));
+
+  const t0 = shots[0].properties.capture_time || 0;
+  const t1 = shots[shots.length - 1].properties.capture_time || 1;
+  const tRange = t1 - t0 || 1;
+
+  for (const shot of shots) {
+    const t = ((shot.properties.capture_time || 0) - t0) / tRange;
+    const r = Math.round(50 + t * 205);
+    const b = Math.round(255 - t * 205);
+    const color = `rgb(${r},50,${b})`;
+    L.circleMarker([shot.geometry.coordinates[1], shot.geometry.coordinates[0]], {
+      radius: 3, color, fillColor: color, fillOpacity: 0.8, weight: 1,
+    }).addTo(map);
+  }
+
+  L.polyline(latlngs, { color: "rgba(255,255,255,0.3)", weight: 1.5 }).addTo(map);
+
+  replay.marker = L.circleMarker(latlngs[0], {
+    radius: 8, color: "#fff", fillColor: "#4aa3ff", fillOpacity: 1, weight: 2,
+  }).addTo(map);
+
+  replay.map = map;
+
+  const scrubber = document.getElementById("replay-scrubber");
+  scrubber.max = shots.length - 1;
+  scrubber.value = 0;
+  replay.currentIndex = 0;
+  updateReplayPosition(0);
+}
+
+function updateReplayPosition(index) {
+  const shots = replay.shots;
+  if (!shots.length) return;
+  const idx = Math.min(Math.max(Math.floor(index), 0), shots.length - 1);
+  const shot = shots[idx];
+  const coords = shot.geometry.coordinates;
+
+  if (replay.marker) replay.marker.setLatLng([coords[1], coords[0]]);
+  document.getElementById("replay-scrubber").value = idx;
+
+  const props = shot.properties;
+  const time = props.capture_time ? new Date(props.capture_time * 1000).toLocaleString() : "";
+  const alt = coords[2] != null ? coords[2].toFixed(1) + " m" : "";
+  document.getElementById("replay-info").innerHTML =
+    `<span>${props.filename || ""}</span><span>${alt}</span><span>${time}</span>`;
+}
+
+function playReplay() {
+  if (!replay.shots.length) return;
+  replay.playing = true;
+  document.getElementById("btn-replay-play").textContent = "Pause";
+  let last = performance.now();
+  function step(now) {
+    if (!replay.playing) return;
+    const dt = (now - last) / 1000;
+    last = now;
+    replay.currentIndex += dt * replay.speed;
+    if (replay.currentIndex >= replay.shots.length - 1) {
+      replay.currentIndex = replay.shots.length - 1;
+      pauseReplay();
+    }
+    updateReplayPosition(replay.currentIndex);
+    if (replay.playing) replay.animFrame = requestAnimationFrame(step);
+  }
+  replay.animFrame = requestAnimationFrame(step);
+}
+
+function pauseReplay() {
+  replay.playing = false;
+  const btn = document.getElementById("btn-replay-play");
+  if (btn) btn.textContent = "Play";
+  if (replay.animFrame) { cancelAnimationFrame(replay.animFrame); replay.animFrame = null; }
+}
+
+document.getElementById("btn-replay-play").addEventListener("click", () => {
+  replay.playing ? pauseReplay() : playReplay();
+});
+
+document.getElementById("replay-scrubber").addEventListener("input", (e) => {
+  pauseReplay();
+  replay.currentIndex = parseInt(e.target.value);
+  updateReplayPosition(replay.currentIndex);
+});
+
+document.getElementById("replay-speed").addEventListener("change", (e) => {
+  replay.speed = parseFloat(e.target.value);
+});
+
+document.querySelector('[data-view="replay"]').addEventListener("click", () => {
+  setTimeout(() => {
+    if (replay.shots.length && !replay.initialized) initReplayMap();
+    if (replay.map) replay.map.invalidateSize();
+  }, 100);
+});
+
+// -- report export --------------------------------------------------------
+
+function escHtml(s) {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+function exportReport() {
+  const project = state.project;
+  const stats = state.stats;
+  if (!project || !stats || !stats.geotagged) return;
+
+  const name = escHtml(project.name);
+  const orthoSrc = project.layers.ortho
+    ? `${location.origin}/files/${project.name}/${project.layers.ortho}` : "";
+  const allTagged = stats.geotagged === stats.photos;
+  const date = new Date().toLocaleDateString();
+
+  const html = `<!doctype html>
+<html><head><meta charset="utf-8">
+<title>Survey Report — ${name}</title>
+<style>
+body{font-family:"Segoe UI",system-ui,sans-serif;color:#1a1a1a;max-width:800px;margin:0 auto;padding:40px 30px}
+h1{font-size:22px;margin:0 0 4px}
+.date{color:#666;font-size:14px;margin-bottom:24px}
+.ortho{max-width:600px;border-radius:6px;margin-bottom:24px}
+h2{font-size:15px;color:#444;border-bottom:1px solid #ddd;padding-bottom:6px;margin:24px 0 12px}
+table{border-collapse:collapse;width:100%;margin-bottom:20px}
+td{padding:8px 12px;border-bottom:1px solid #eee;font-size:14px}
+td:first-child{color:#666;width:45%}
+.footer{margin-top:40px;padding-top:16px;border-top:1px solid #ddd;color:#999;font-size:12px}
+@media print{body{padding:20px}}
+</style></head><body>
+<h1>${name}</h1>
+<p class="date">${date}</p>
+${orthoSrc ? `<img class="ortho" src="${orthoSrc}" alt="Orthomosaic">` : ""}
+<h2>Summary</h2>
+<table>
+<tr><td>Photos</td><td>${stats.photos}</td></tr>
+<tr><td>Geotagged</td><td>${stats.geotagged} / ${stats.photos}${allTagged ? " (all)" : ""}</td></tr>
+<tr><td>Area covered</td><td>${Math.round(stats.extent_m.width)} × ${Math.round(stats.extent_m.height)} m</td></tr>
+<tr><td>Mean altitude</td><td>${stats.altitude.mean.toFixed(1)} m</td></tr>
+<tr><td>Photo spacing (median)</td><td>${stats.spacing_m.median ? stats.spacing_m.median.toFixed(1) + " m" : "—"}</td></tr>
+</table>
+<h2>Survey extent</h2>
+<table>
+<tr><td>Centre</td><td>${stats.centre.lat.toFixed(6)}, ${stats.centre.lon.toFixed(6)}</td></tr>
+<tr><td>North / South</td><td>${stats.bounds.north.toFixed(6)} / ${stats.bounds.south.toFixed(6)}</td></tr>
+<tr><td>East / West</td><td>${stats.bounds.east.toFixed(6)} / ${stats.bounds.west.toFixed(6)}</td></tr>
+<tr><td>Altitude range</td><td>${stats.altitude.min.toFixed(1)} – ${stats.altitude.max.toFixed(1)} m</td></tr>
+<tr><td>Spacing range</td><td>${stats.spacing_m.min != null ? stats.spacing_m.min.toFixed(1) + " – " + stats.spacing_m.max.toFixed(1) + " m" : "—"}</td></tr>
+</table>
+<div class="footer">Generated by drone-gcs</div>
+<script>window.onload=()=>setTimeout(()=>window.print(),500)<\/script>
+</body></html>`;
+
+  const w = window.open("", "_blank");
+  w.document.write(html);
+  w.document.close();
+}
+
+document.getElementById("btn-export").addEventListener("click", exportReport);
 
 loadProjects();
