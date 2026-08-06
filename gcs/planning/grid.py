@@ -17,7 +17,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
-from math import atan2, ceil, cos, hypot, radians, sin
+from math import atan2, ceil, cos, degrees, hypot, pi, radians, sin
 
 from .camera import Camera
 from .geo import LatLon, LocalFrame, polygon_area_m2, rotate
@@ -43,7 +43,11 @@ class SurveyParams:
     side_overlap: float = 0.70
     ground_speed_ms: float = 8.0
     #: Compass bearing of the flight lines, degrees clockwise from north.
+    #: Ignored when ``auto_heading`` is set.
     heading_deg: float = 0.0
+    #: Automatically choose the heading that aligns lines with the polygon's
+    #: longest axis, minimising the weak edge strips.
+    auto_heading: bool = False
     pattern: Pattern = Pattern.NADIR
 
     #: Keep the entire flight inside the drawn boundary, including the overshoot
@@ -109,6 +113,9 @@ class SurveyPlan:
     gsd_cm_per_px: float
     photo_spacing_m: float
     line_spacing_m: float
+    #: The heading actually used, which may differ from the requested one when
+    #: auto_heading chose it.
+    resolved_heading_deg: float = 0.0
     warnings: list[str] = field(default_factory=list)
 
     #: Endurance at the planned survey speed, when an aircraft and battery were
@@ -157,9 +164,10 @@ def plan_survey(
     line_spacing = camera.line_spacing_m(params.altitude_m, params.side_overlap)
     photo_spacing = camera.photo_spacing_m(params.altitude_m, params.front_overlap)
 
-    headings = [params.heading_deg]
+    heading = optimal_heading_deg(local) if params.auto_heading else params.heading_deg
+    headings = [heading]
     if params.pattern is Pattern.CROSSHATCH:
-        headings.append(params.heading_deg + 90.0)
+        headings.append(heading + 90.0)
 
     all_lines: list[tuple[Point, Point]] = []
     for heading in headings:
@@ -209,6 +217,7 @@ def plan_survey(
         gsd_cm_per_px=camera.gsd_cm_per_px(params.altitude_m),
         photo_spacing_m=photo_spacing,
         line_spacing_m=line_spacing,
+        resolved_heading_deg=heading,
         warnings=warnings,
         endurance_min=endurance,
         batteries_needed=batteries,
@@ -385,3 +394,39 @@ def _path_length(lines: list[tuple[Point, Point]]) -> float:
         total += hypot(end[0] - start[0], end[1] - start[1])
         previous_end = end
     return total
+
+
+def optimal_heading_deg(polygon: list[Point]) -> float:
+    """Heading that aligns flight lines with the polygon's longest axis.
+
+    Minimises the polygon's width perpendicular to the flight direction, which
+    means fewer, longer lines and the smallest possible edge-strip area. The
+    outer lines — the weakest for coverage when keep_inside is on — benefit
+    most because there are fewer of them relative to interior lines.
+
+    Tries every polygon edge direction (the optimum always coincides with one)
+    and returns the best heading in [0, 180) degrees clockwise from north.
+    """
+    best_heading = 0.0
+    best_width = float("inf")
+
+    n = len(polygon)
+    for i in range(n):
+        x1, y1 = polygon[i]
+        x2, y2 = polygon[(i + 1) % n]
+        dx, dy = x2 - x1, y2 - y1
+        if dx == 0.0 and dy == 0.0:
+            continue
+
+        edge_angle = atan2(dx, dy)
+
+        # Project every vertex onto the axis perpendicular to this edge.
+        perp_x, perp_y = cos(edge_angle), -sin(edge_angle)
+        projections = [px * perp_x + py * perp_y for px, py in polygon]
+        width = max(projections) - min(projections)
+
+        if width < best_width:
+            best_width = width
+            best_heading = degrees(edge_angle) % 180.0
+
+    return round(best_heading, 1)

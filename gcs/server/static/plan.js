@@ -140,6 +140,7 @@
     weight: document.getElementById("in-weight"),
     hover: document.getElementById("in-hover"),
     keepInside: document.getElementById("in-keep-inside"),
+    autoHeading: document.getElementById("in-auto-heading"),
   };
 
   const outputs = {
@@ -156,8 +157,11 @@
     outputs.speed.textContent = `${inputs.speed.value} m/s`;
     outputs.front.textContent = `${inputs.front.value}%`;
     outputs.side.textContent = `${inputs.side.value}%`;
-    outputs.heading.textContent = `${inputs.heading.value}°`;
+    outputs.heading.textContent = inputs.autoHeading.checked
+      ? `auto`
+      : `${inputs.heading.value}°`;
     outputs.weight.textContent = `${Number(inputs.weight.value).toFixed(2)} kg`;
+    inputs.heading.disabled = inputs.autoHeading.checked;
   }
 
   Object.values(inputs).forEach((input) => {
@@ -193,6 +197,7 @@
       front_overlap: Number(inputs.front.value) / 100,
       side_overlap: Number(inputs.side.value) / 100,
       heading_deg: Number(inputs.heading.value),
+      auto_heading: inputs.autoHeading.checked,
       pattern: inputs.pattern.value,
       all_up_weight_kg: Number(inputs.weight.value),
       measured_hover_min: inputs.hover.value ? Number(inputs.hover.value) : null,
@@ -215,6 +220,12 @@
 
     state.lastPlan = plan;
     window.planner.lastPlan = plan;   // the fly panel uploads whatever is shown
+
+    if (inputs.autoHeading.checked && plan.stats.resolved_heading_deg != null) {
+      inputs.heading.value = plan.stats.resolved_heading_deg;
+      outputs.heading.textContent = `${plan.stats.resolved_heading_deg}°`;
+    }
+
     drawPlan(plan);
     showStats(plan);
   }
@@ -296,6 +307,7 @@
         <tr><td>Distance</td><td>${(s.path_length_m / 1000).toFixed(1)} km</td></tr>
         <tr><td>Photo every</td><td>${s.photo_spacing_m} m</td></tr>
         <tr><td>Line spacing</td><td>${s.line_spacing_m} m</td></tr>
+        <tr><td>Grid heading</td><td>${s.resolved_heading_deg}°</td></tr>
         <tr><td>Max shutter speed</td>
             <td class="${overSpeed ? "bad" : ""}">${s.max_ground_speed_ms} m/s</td></tr>
         <tr><td>Best survey speed</td><td>${s.best_survey_speed_ms} m/s</td></tr>

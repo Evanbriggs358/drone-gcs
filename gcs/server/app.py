@@ -188,6 +188,7 @@ class PlanRequest(BaseModel):
     side_overlap: float = Field(default=0.70, ge=0, lt=1)
     ground_speed_ms: float = Field(default=8.0, gt=0, le=30)
     heading_deg: float = 0.0
+    auto_heading: bool = False
     pattern: str = "nadir"
     camera: str | None = None
     #: Hold the entire flight inside the drawn boundary, turn overshoot included.
@@ -237,6 +238,7 @@ def make_plan(request: PlanRequest) -> dict:
         side_overlap=request.side_overlap,
         ground_speed_ms=request.ground_speed_ms,
         heading_deg=request.heading_deg,
+        auto_heading=request.auto_heading,
         pattern=pattern,
         keep_inside=request.keep_inside,
     )
@@ -304,6 +306,7 @@ def make_plan(request: PlanRequest) -> dict:
             "batteries_needed": round(plan.batteries_needed, 2),
             "best_survey_speed_ms": round(plan.best_survey_speed_ms, 1),
             "calibrated": request.measured_hover_min is not None,
+            "resolved_heading_deg": round(plan.resolved_heading_deg, 1),
         },
         "warnings": plan.warnings,
     }
