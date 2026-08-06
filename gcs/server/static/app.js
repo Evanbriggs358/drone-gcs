@@ -679,14 +679,21 @@ function buildReplayMap() {
   const t1 = shots[shots.length - 1].properties.capture_time || 1;
   const tRange = t1 - t0 || 1;
 
-  for (const shot of shots) {
+  for (let i = 0; i < shots.length; i++) {
+    const shot = shots[i];
     const t = ((shot.properties.capture_time || 0) - t0) / tRange;
     const r = Math.round(50 + t * 205);
     const b = Math.round(255 - t * 205);
     const color = `rgb(${r},50,${b})`;
-    L.circleMarker([shot.geometry.coordinates[1], shot.geometry.coordinates[0]], {
-      radius: 3, color, fillColor: color, fillOpacity: 0.8, weight: 1,
+    const cm = L.circleMarker([shot.geometry.coordinates[1], shot.geometry.coordinates[0]], {
+      radius: 5, color, fillColor: color, fillOpacity: 0.8, weight: 1,
     }).addTo(map);
+    const idx = i;
+    cm.on("click", () => {
+      pauseReplay();
+      replay.currentIndex = idx;
+      updateReplayPosition(idx);
+    });
   }
 
   L.polyline(latlngs, { color: "rgba(255,255,255,0.3)", weight: 1.5 }).addTo(map);
@@ -744,8 +751,10 @@ function playReplay() {
     last = now;
     replay.currentIndex += dt * replay.speed;
     if (replay.currentIndex >= replay.shots.length - 1) {
-      replay.currentIndex = replay.shots.length - 1;
+      replay.currentIndex = 0;
+      updateReplayPosition(0);
       pauseReplay();
+      return;
     }
     updateReplayPosition(replay.currentIndex);
     if (replay.playing) replay.animFrame = requestAnimationFrame(step);
@@ -779,6 +788,24 @@ document.querySelector('[data-view="replay"]').addEventListener("click", () => {
     if (replay.shots.length && !replay.initialized) initReplayMap();
     if (replay.map) replay.map.invalidateSize();
   }, 100);
+});
+
+// -- photo lightbox -------------------------------------------------------
+
+const lightbox = document.getElementById("photo-lightbox");
+const lightboxImg = document.getElementById("lightbox-img");
+
+document.getElementById("replay-photo").addEventListener("click", () => {
+  lightboxImg.src = document.getElementById("replay-photo").src;
+  lightbox.classList.remove("hidden");
+});
+
+document.getElementById("lightbox-close").addEventListener("click", () => {
+  lightbox.classList.add("hidden");
+});
+
+lightbox.addEventListener("click", (e) => {
+  if (e.target === lightbox) lightbox.classList.add("hidden");
 });
 
 // -- report export --------------------------------------------------------
