@@ -3,7 +3,7 @@ import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { OBJLoader } from "three/addons/loaders/OBJLoader.js";
 import { MTLLoader } from "three/addons/loaders/MTLLoader.js";
 
-const state = { project: null, view: "model", scene: null, stats: null };
+const state = { project: null, view: "replay", scene: null, stats: null };
 
 // -- demo data for static deployment --------------------------------------
 
