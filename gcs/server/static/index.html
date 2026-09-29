@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>drone-gcs</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-<link rel="stylesheet" href="/style.css">
+<link rel="stylesheet" href="style.css">
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script type="importmap">
 {
@@ -33,92 +33,208 @@
 <div id="page-plan" class="page active">
 
   <aside id="plan-panel">
-    <h2>Survey area</h2>
-    <p id="draw-hint" class="hint-block">
-      Click on the map to place corners. Three or more makes a survey area.
-    </p>
-    <div class="button-row">
-      <button id="btn-undo" class="secondary">Undo point</button>
-      <button id="btn-clear" class="secondary">Clear</button>
+
+    <!-- Flight mode selector ------------------------------------------------ -->
+    <div class="flight-mode">
+      <button id="btn-mode-new" class="mode-tab active">New flight</button>
+      <button id="btn-mode-saved" class="mode-tab">Saved flight</button>
     </div>
 
-    <h2>Flight</h2>
-    <label>Altitude
-      <span class="value-out" id="out-altitude">80 m</span>
-      <input type="range" id="in-altitude" min="20" max="200" step="5" value="80">
-    </label>
-    <label>Ground speed
-      <span class="value-out" id="out-speed">8 m/s</span>
-      <input type="range" id="in-speed" min="2" max="20" step="0.5" value="8">
-    </label>
-    <label>Front overlap
-      <span class="value-out" id="out-front">70%</span>
-      <input type="range" id="in-front" min="50" max="90" step="5" value="70">
-    </label>
-    <label>Side overlap
-      <span class="value-out" id="out-side">70%</span>
-      <input type="range" id="in-side" min="50" max="90" step="5" value="70">
-    </label>
-    <label>Grid heading
-      <span class="value-out" id="out-heading">0&deg;</span>
-      <input type="range" id="in-heading" min="0" max="175" step="5" value="0">
-    </label>
-    <label class="check-label">
-      <input type="checkbox" id="in-auto-heading" checked>
-      <span>Auto-align for best edge coverage</span>
-    </label>
-
-    <label class="select-label">Pattern
-      <select id="in-pattern">
-        <option value="nadir">Nadir — orthomosaic</option>
-        <option value="crosshatch">Crosshatch — 3D model</option>
-      </select>
-    </label>
-
-    <label class="check-label">
-      <input type="checkbox" id="in-keep-inside" checked>
-      <span>Stay inside the boundary</span>
-    </label>
-    <p id="keep-inside-note" class="hint-block">
-      Flight lines stop short of the edge so the turn overshoot stays inside.
-      Leave on when the boundary marks trees, wires, or a property line.
-    </p>
-
-    <h2>Aircraft</h2>
-    <label>All&#8209;up weight
-      <span class="value-out" id="out-weight">1.60 kg</span>
-      <input type="range" id="in-weight" min="0.8" max="3.0" step="0.05" value="1.6">
-    </label>
-    <label class="select-label">Measured hover time
-      <input type="number" id="in-hover" min="1" max="60" step="0.5"
-             placeholder="minutes — leave blank to estimate">
-    </label>
-    <p id="calibration-note" class="hint-block">
-      Endurance is estimated from component figures. Fly a timed hover at real
-      weight and enter it here to replace the estimate with measurement.
-    </p>
-
-    <h2>Result</h2>
-    <div id="plan-stats" class="plan-stats muted">Draw an area to see the flight plan.</div>
-    <div id="plan-warnings"></div>
-
-    <h2>Aircraft link</h2>
-    <div class="button-row">
-      <input type="text" id="in-companion" placeholder="http://raspberrypi.local:8001">
+    <div id="saved-flight-picker" class="saved-picker hidden">
+      <div class="site-bar">
+        <select id="site-select">
+          <option value="">— choose a saved flight —</option>
+        </select>
+        <button id="btn-site-delete" class="secondary" title="Delete this flight">&#x2715;</button>
+      </div>
     </div>
-    <div class="button-row" style="margin-top:6px">
-      <button id="btn-connect" class="secondary">Connect</button>
-      <button id="btn-disconnect" class="secondary">Disconnect</button>
+
+    <!-- Step 1 ------------------------------------------------------------ -->
+    <details class="step" open>
+      <summary><span class="step-num">1</span> Survey area</summary>
+      <div class="step-body">
+        <p id="draw-hint" class="hint-block">
+          Click on the map to place corners. Three or more makes a survey area.
+        </p>
+        <div class="button-row">
+          <button id="btn-undo" class="secondary">Undo point</button>
+          <button id="btn-clear" class="secondary">Clear</button>
+        </div>
+      </div>
+    </details>
+
+    <!-- Step 2 ------------------------------------------------------------ -->
+    <details class="step" open>
+      <summary><span class="step-num">2</span> Flight settings</summary>
+      <div class="step-body">
+        <label>Altitude
+          <span class="value-out" id="out-altitude">20 m</span>
+          <input type="range" id="in-altitude" min="20" max="200" step="5" value="20">
+        </label>
+        <label>Ground speed
+          <span class="value-out" id="out-speed">2 m/s</span>
+          <input type="range" id="in-speed" min="2" max="20" step="0.5" value="2">
+        </label>
+        <label>Front overlap
+          <span class="value-out" id="out-front">50%</span>
+          <input type="range" id="in-front" min="20" max="90" step="5" value="50">
+        </label>
+        <label>Side overlap
+          <span class="value-out" id="out-side">50%</span>
+          <input type="range" id="in-side" min="20" max="90" step="5" value="50">
+        </label>
+        <label>Grid heading
+          <span class="value-out" id="out-heading">0&deg;</span>
+          <input type="range" id="in-heading" min="0" max="175" step="5" value="0">
+        </label>
+        <label class="check-label">
+          <input type="checkbox" id="in-auto-heading" checked>
+          <span>Auto-align for best edge coverage</span>
+        </label>
+        <label class="select-label">Pattern
+          <select id="in-pattern">
+            <option value="nadir">Nadir — orthomosaic</option>
+            <option value="crosshatch">Crosshatch — 3D model</option>
+          </select>
+        </label>
+        <label class="check-label">
+          <input type="checkbox" id="in-terrain">
+          <span>Terrain following (altitude above ground)</span>
+        </label>
+        <p id="terrain-note" class="hint-block hidden">
+          Altitude is measured above the terrain surface using SRTM data, not
+          above the launch point. Requires SRTM tiles on the Pi.
+        </p>
+        <label class="check-label">
+          <input type="checkbox" id="in-keep-inside" checked>
+          <span>Stay inside the boundary</span>
+        </label>
+        <p id="keep-inside-note" class="hint-block">
+          Flight lines stop short of the edge so the turn overshoot stays inside.
+          Leave on when the boundary marks trees, wires, or a property line.
+        </p>
+        <label>Expected wind
+          <span class="value-out" id="out-wind">0 m/s</span>
+          <input type="range" id="in-wind" min="0" max="15" step="0.5" value="0">
+        </label>
+
+        <div class="coverage-panel" id="coverage-panel">
+          <div class="coverage-stat" id="coverage-stat">
+            <div class="coverage-number" id="coverage-number">&mdash;</div>
+            <div class="coverage-label">views per point</div>
+            <div class="coverage-quality" id="coverage-quality"></div>
+          </div>
+          <div class="coverage-map">
+            <canvas id="coverage-canvas" width="200" height="200"></canvas>
+            <div class="coverage-legend">
+              <span class="cl-pair"><span class="cl-swatch cl-bad"></span>&lt;3</span>
+              <span class="cl-pair"><span class="cl-swatch cl-ok"></span>3–5</span>
+              <span class="cl-pair"><span class="cl-swatch cl-good"></span>5–9</span>
+              <span class="cl-pair"><span class="cl-swatch cl-great"></span>9+</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </details>
+
+    <!-- Step 3 ------------------------------------------------------------ -->
+    <details class="step">
+      <summary><span class="step-num">3</span> Aircraft</summary>
+      <div class="step-body">
+        <label>All&#8209;up weight
+          <span class="value-out" id="out-weight">0.80 kg</span>
+          <input type="range" id="in-weight" min="0.8" max="3.0" step="0.05" value="0.8">
+        </label>
+        <label class="select-label">Measured hover time
+          <input type="number" id="in-hover" min="1" max="60" step="0.5"
+                 placeholder="minutes — leave blank to estimate">
+        </label>
+        <p id="calibration-note" class="hint-block">
+          Endurance is estimated from component figures. Fly a timed hover at real
+          weight and enter it here to replace the estimate with measurement.
+        </p>
+      </div>
+    </details>
+
+    <!-- Step 4 ------------------------------------------------------------ -->
+    <details class="step" id="step-plan">
+      <summary><span class="step-num">4</span> Flight plan</summary>
+      <div class="step-body">
+        <div id="plan-stats" class="plan-stats muted">Draw an area to see the flight plan.</div>
+        <div id="plan-warnings"></div>
+      </div>
+    </details>
+
+    <!-- Step 5 ------------------------------------------------------------ -->
+    <details class="step" id="step-connect">
+      <summary><span class="step-num">5</span> Connect to aircraft</summary>
+      <div class="step-body">
+        <div class="button-row">
+          <input type="text" id="in-companion" placeholder="http://raspberrypi.local:8001">
+        </div>
+        <div class="button-row" style="margin-top:6px">
+          <button id="btn-connect" class="secondary">Connect</button>
+          <button id="btn-disconnect" class="secondary">Disconnect</button>
+        </div>
+        <div id="link-status" class="link-status muted">Not connected.</div>
+        <div id="camera-preview-container" class="camera-preview hidden">
+          <img id="camera-preview" alt="Camera preview">
+          <div class="preview-controls">
+            <button id="btn-preview-start" class="secondary">Camera preview</button>
+            <button id="btn-preview-stop" class="secondary hidden">Stop preview</button>
+          </div>
+        </div>
+        <div id="telemetry" class="telemetry skeleton"></div>
+        <div id="flight-controls" class="flight-controls hidden">
+          <div class="fc-row">
+            <button id="btn-fc-pause" class="fc-btn pause" title="Pause — hold position">Pause</button>
+            <button id="btn-fc-resume" class="fc-btn resume" title="Resume autonomous mission">Resume</button>
+          </div>
+          <div class="fc-row">
+            <button id="btn-fc-rtl" class="fc-btn rtl" title="Return to launch point">RTL</button>
+            <button id="btn-fc-land" class="fc-btn land" title="Land immediately">Land</button>
+          </div>
+          <div class="fc-row">
+            <button id="btn-fc-arm" class="fc-btn arm" title="Arm motors — propellers will spin">Arm</button>
+            <button id="btn-fc-disarm" class="fc-btn disarm" title="Disarm motors — WILL CUT POWER if airborne">Disarm</button>
+          </div>
+        </div>
+        <details id="diagnostics" class="diagnostics">
+          <summary>Diagnostics</summary>
+          <div id="diag-body" class="diag-body">
+            <div id="diag-link" class="diag-row muted">No data yet</div>
+            <div id="diag-log" class="diag-log"></div>
+          </div>
+        </details>
+      </div>
+    </details>
+
+    <!-- Step 6 ------------------------------------------------------------ -->
+    <details class="step" id="step-mission">
+      <summary><span class="step-num">6</span> Mission</summary>
+      <div class="step-body">
+        <button id="btn-preflight" class="secondary full">Run pre&#8209;flight checks</button>
+        <div id="preflight" class="preflight"></div>
+        <button id="btn-upload" class="primary full" disabled>Upload mission</button>
+        <div id="upload-result"></div>
+
+        <hr class="step-divider">
+
+        <button id="btn-offload" class="secondary full">Offload photos</button>
+        <div id="offload-status" class="offload-status"></div>
+        <button id="btn-reconstruct" class="secondary full" style="margin-top:6px">Reconstruct</button>
+        <div id="reconstruct-status" class="offload-status"></div>
+      </div>
+    </details>
+
+    <!-- Save flight --------------------------------------------------------- -->
+    <div class="save-flight">
+      <div class="site-save-row">
+        <input type="text" id="in-site-name" placeholder="Flight name">
+        <button id="btn-site-save" class="primary">Save flight</button>
+      </div>
     </div>
-    <div id="link-status" class="link-status muted">Not connected.</div>
 
-    <div id="telemetry" class="telemetry hidden"></div>
-
-    <h2>Launch</h2>
-    <button id="btn-preflight" class="secondary full">Run pre&#8209;flight checks</button>
-    <div id="preflight" class="preflight"></div>
-    <button id="btn-upload" class="primary full" disabled>Upload mission</button>
-    <div id="upload-result"></div>
   </aside>
 
   <div id="map"></div>
@@ -133,16 +249,37 @@
 
   <main>
     <div id="tabs" role="tablist">
-      <button class="tab active" data-view="model" role="tab">3D model</button>
+      <button class="tab active" data-view="replay" role="tab">Flight replay</button>
       <button class="tab" data-view="map" role="tab">Maps</button>
-      <button class="tab" data-view="replay" role="tab">Flight replay</button>
+      <button class="tab" data-view="model" role="tab">3D model</button>
       <button class="tab" data-view="stats" role="tab">Survey data</button>
     </div>
 
-    <section id="view-model" class="view active">
-      <div id="model-status" class="status">Select a reconstruction</div>
-      <canvas id="model-canvas"></canvas>
-      <div id="model-hint" class="hint hidden">drag to orbit &middot; scroll to zoom &middot; right&#8209;drag to pan</div>
+    <section id="view-replay" class="view active">
+      <div id="replay-status" class="status">Select a reconstruction</div>
+      <div id="replay-container">
+        <div id="replay-map"></div>
+      <div id="replay-pip" class="hidden">
+        <img id="replay-photo" alt="Capture">
+      </div>
+        <div id="replay-controls">
+          <div id="replay-info"></div>
+          <input type="range" id="replay-scrubber" min="0" max="0" value="0" step="1">
+          <div id="replay-graphs" class="replay-graphs hidden">
+            <canvas id="graph-altitude"></canvas>
+            <canvas id="graph-speed"></canvas>
+          </div>
+          <div class="replay-buttons">
+            <button id="btn-replay-play" class="secondary">Play</button>
+            <select id="replay-speed">
+              <option value="1">1x</option>
+              <option value="2">2x</option>
+              <option value="5">5x</option>
+              <option value="10">10x</option>
+            </select>
+          </div>
+        </div>
+      </div>
     </section>
 
     <section id="view-map" class="view">
@@ -166,27 +303,10 @@
       </div>
     </section>
 
-    <section id="view-replay" class="view">
-      <div id="replay-status" class="status">Select a reconstruction</div>
-      <div id="replay-container">
-        <div id="replay-map"></div>
-      <div id="replay-pip" class="hidden">
-        <img id="replay-photo" alt="Capture">
-      </div>
-        <div id="replay-controls">
-          <div id="replay-info"></div>
-          <input type="range" id="replay-scrubber" min="0" max="0" value="0" step="1">
-          <div class="replay-buttons">
-            <button id="btn-replay-play" class="secondary">Play</button>
-            <select id="replay-speed">
-              <option value="1">1x</option>
-              <option value="2">2x</option>
-              <option value="5">5x</option>
-              <option value="10">10x</option>
-            </select>
-          </div>
-        </div>
-      </div>
+    <section id="view-model" class="view">
+      <div id="model-status" class="status">Select a reconstruction</div>
+      <canvas id="model-canvas"></canvas>
+      <div id="model-hint" class="hint hidden">drag to orbit &middot; scroll to zoom &middot; right&#8209;drag to pan</div>
     </section>
 
     <section id="view-stats" class="view">
@@ -203,8 +323,22 @@
   <button id="lightbox-close" class="secondary">Close</button>
 </div>
 
-<script src="/plan.js"></script>
-<script src="/fly.js"></script>
-<script type="module" src="/app.js"></script>
+<div id="toast-rack"></div>
+<script>
+function toast(message, tone) {
+  var rack = document.getElementById("toast-rack");
+  var el = document.createElement("div");
+  el.className = "toast" + (tone ? " " + tone : "");
+  el.textContent = message;
+  rack.appendChild(el);
+  setTimeout(function () {
+    el.classList.add("out");
+    el.addEventListener("animationend", function () { el.remove(); });
+  }, 3200);
+}
+</script>
+<script src="plan.js"></script>
+<script src="fly.js"></script>
+<script type="module" src="app.js?v=3"></script>
 </body>
 </html>
