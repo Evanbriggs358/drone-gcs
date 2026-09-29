@@ -11,9 +11,21 @@ async function loadProjects() {
   const list = document.getElementById("project-list");
   let projects;
   try {
-    projects = await (await fetch("api/projects")).json();
+    const resp = await fetch("api/projects");
+    if (!resp.ok) throw new Error(resp.status);
+    projects = await resp.json();
   } catch (err) {
-    list.innerHTML = `<li class="empty">Could not reach the server</li>`;
+    list.innerHTML = `<li class="empty offline-note">No server connected.<br><small>After a survey flight, the companion computer serves reconstructions here.</small></li>`;
+    const descriptions = {
+      "replay-status": "Replay the flight path with altitude and speed graphs, synced to captured photos.",
+      "map-status": "Browse the orthomosaic, DSM, and NDVI layers with measurement tools.",
+      "model-status": "Inspect the 3D textured mesh — orbit, zoom, and pan.",
+      "stats-body": "View GSD, area, point cloud density, and export a PDF survey report.",
+    };
+    for (const [id, text] of Object.entries(descriptions)) {
+      const el = document.getElementById(id);
+      if (el) el.textContent = text;
+    }
     return;
   }
 
