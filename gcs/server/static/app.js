@@ -5,6 +5,81 @@ import { MTLLoader } from "three/addons/loaders/MTLLoader.js";
 
 const state = { project: null, view: "model", scene: null, stats: null };
 
+// -- demo data for static deployment --------------------------------------
+
+function buildDemoData() {
+  const centreLat = 47.6300, centreLon = -122.3175;
+  const alt = 80, speed = 4.5, lineSpacing = 0.00012, photoSpacing = 0.00008;
+  const lines = 8, photosPerLine = 14;
+  const shots = [];
+  let t = Date.now() / 1000 - 600;
+  const startLon = centreLon - (lines * lineSpacing) / 2;
+  const startLat = centreLat - (photosPerLine * photoSpacing) / 2;
+
+  for (let line = 0; line < lines; line++) {
+    const lon = startLon + line * lineSpacing;
+    for (let p = 0; p < photosPerLine; p++) {
+      const idx = line % 2 === 0 ? p : photosPerLine - 1 - p;
+      const lat = startLat + idx * photoSpacing;
+      const jitter = (Math.sin(line * 7 + p * 13) * 0.3);
+      shots.push({
+        geometry: { coordinates: [lon, lat, alt + jitter], type: "Point" },
+        properties: {
+          filename: `DJI_${String(shots.length + 1).padStart(4, "0")}.jpg`,
+          capture_time: t,
+        },
+      });
+      t += photoSpacing * 111320 / speed;
+    }
+    t += 6;
+  }
+
+  const project = {
+    name: "Volunteer Park — demo",
+    photos: shots.length,
+    has_map: false,
+    has_3d_model: false,
+    layers: {},
+    products: {},
+  };
+
+  const lats = shots.map(s => s.geometry.coordinates[1]);
+  const lons = shots.map(s => s.geometry.coordinates[0]);
+  const alts = shots.map(s => s.geometry.coordinates[2]);
+  const spacings = [];
+  for (let i = 1; i < shots.length; i++) {
+    const dlat = (lats[i] - lats[i - 1]) * 111320;
+    const dlon = (lons[i] - lons[i - 1]) * 111320 * Math.cos(lats[i] * Math.PI / 180);
+    spacings.push(Math.sqrt(dlat * dlat + dlon * dlon));
+  }
+  spacings.sort((a, b) => a - b);
+
+  const widthM = (Math.max(...lons) - Math.min(...lons)) * 111320 * Math.cos(centreLat * Math.PI / 180);
+  const heightM = (Math.max(...lats) - Math.min(...lats)) * 111320;
+
+  const stats = {
+    photos: shots.length,
+    geotagged: shots.length,
+    with_heading: shots.length,
+    centre: { lat: centreLat, lon: centreLon },
+    bounds: {
+      north: Math.max(...lats), south: Math.min(...lats),
+      east: Math.max(...lons), west: Math.min(...lons),
+    },
+    extent_m: { width: Math.round(widthM), height: Math.round(heightM) },
+    altitude: {
+      min: Math.min(...alts), max: Math.max(...alts),
+      mean: alts.reduce((a, b) => a + b) / alts.length,
+    },
+    spacing_m: {
+      min: spacings[0], max: spacings[spacings.length - 1],
+      median: spacings[Math.floor(spacings.length / 2)],
+    },
+  };
+
+  return { project, shots, stats };
+}
+
 // -- project list ---------------------------------------------------------
 
 async function loadProjects() {
@@ -15,18 +90,9 @@ async function loadProjects() {
     if (!resp.ok) throw new Error(resp.status);
     projects = await resp.json();
   } catch (err) {
-    list.innerHTML = `<li class="empty offline-note">No server connected.<br><small>After a survey flight, the companion computer serves reconstructions here.</small></li>`;
-    const descriptions = {
-      "replay-status": "Replay the flight path with altitude and speed graphs, synced to captured photos.",
-      "map-status": "Browse the orthomosaic, DSM, and NDVI layers with measurement tools.",
-      "model-status": "Inspect the 3D textured mesh — orbit, zoom, and pan.",
-      "stats-body": "View GSD, area, point cloud density, and export a PDF survey report.",
-    };
-    for (const [id, text] of Object.entries(descriptions)) {
-      const el = document.getElementById(id);
-      if (el) el.textContent = text;
-    }
-    return;
+    const demo = buildDemoData();
+    state.demo = demo;
+    projects = [demo.project];
   }
 
   if (!projects.length) {
@@ -326,11 +392,15 @@ async function showStats(project) {
   document.getElementById("stats-toolbar").classList.add("hidden");
 
   let stats;
-  try {
-    stats = await (await fetch(`api/projects/${project.name}/stats`)).json();
-  } catch {
-    body.textContent = "Could not load survey data";
-    return;
+  if (state.demo && state.demo.project.name === project.name) {
+    stats = state.demo.stats;
+  } else {
+    try {
+      stats = await (await fetch(`api/projects/${project.name}/stats`)).json();
+    } catch {
+      body.textContent = "Could not load survey data";
+      return;
+    }
   }
 
   if (!stats.geotagged) {
@@ -396,8 +466,7 @@ async function showStats(project) {
     <div class="cards">${cards}</div>
     <h3>Survey extent</h3>
     <table>${rows}</table>
-    <h3>Products</h3>
-    <div class="downloads">${files}</div>`;
+    ${files ? `<h3>Products</h3><div class="downloads">${files}</div>` : ""}`;
 
   state.stats = stats;
   document.getElementById("stats-toolbar").classList.remove("hidden");
@@ -781,11 +850,15 @@ async function showReplay(project) {
   status.textContent = "Loading flight data…";
 
   let shots;
-  try {
-    shots = await (await fetch(`api/projects/${project.name}/shots`)).json();
-  } catch {
-    status.textContent = "Could not load flight data";
-    return;
+  if (state.demo && state.demo.project.name === project.name) {
+    shots = state.demo.shots;
+  } else {
+    try {
+      shots = await (await fetch(`api/projects/${project.name}/shots`)).json();
+    } catch {
+      status.textContent = "Could not load flight data";
+      return;
+    }
   }
 
   if (!shots.length) {
@@ -857,7 +930,7 @@ function buildReplayMap() {
 
   buildReplayGraphs(shots);
 
-  document.getElementById("replay-pip").classList.remove("hidden");
+  if (!state.demo) document.getElementById("replay-pip").classList.remove("hidden");
   updateReplayPosition(0);
 }
 
@@ -939,7 +1012,7 @@ function updateReplayPosition(index) {
   if (idx !== replay.lastPhotoIdx) {
     replay.lastPhotoIdx = idx;
     const filename = shot.properties.filename;
-    if (filename && state.project) {
+    if (filename && state.project && !state.demo) {
       document.getElementById("replay-photo").src =
         `/files/${state.project.name}/images/${filename}`;
     }
