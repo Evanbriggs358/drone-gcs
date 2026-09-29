@@ -1102,6 +1102,17 @@ document.querySelector('[data-view="replay"]').addEventListener("click", () => {
   }, 100);
 });
 
+document.querySelector('.page-tab[data-page="results"]').addEventListener("click", () => {
+  setTimeout(() => {
+    if (replay.shots.length && !replay.initialized) initReplayMap();
+    if (replay.map) {
+      replay.map.invalidateSize();
+      const latlngs = replay.shots.map(s => [s.geometry.coordinates[1], s.geometry.coordinates[0]]);
+      replay.map.fitBounds(L.latLngBounds(latlngs).pad(0.1));
+    }
+  }, 100);
+});
+
 // -- photo lightbox -------------------------------------------------------
 
 const lightbox = document.getElementById("photo-lightbox");
