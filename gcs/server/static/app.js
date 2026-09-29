@@ -11,7 +11,7 @@ async function loadProjects() {
   const list = document.getElementById("project-list");
   let projects;
   try {
-    projects = await (await fetch("/api/projects")).json();
+    projects = await (await fetch("api/projects")).json();
   } catch (err) {
     list.innerHTML = `<li class="empty">Could not reach the server</li>`;
     return;
@@ -103,12 +103,132 @@ const LAYERS = [
       "Where each photo was taken. Red triangles are the solved camera " +
       "positions, cyan the recorded GPS fix, joined in capture order.",
   },
+  {
+    key: "coverage",
+    label: "Coverage analysis",
+    computed: true,
+    caption:
+      "Computed from photo positions and altitude. Each cell shows how many " +
+      "photos cover it. Blue is well-covered; yellow and red mark thin overlap " +
+      "where reconstruction quality may suffer.",
+  },
 ];
+
+function renderCoverageHeatmap(shots) {
+  if (shots.length < 2) return null;
+
+  const coords = shots.map((s) => ({
+    lat: s.geometry.coordinates[1],
+    lon: s.geometry.coordinates[0],
+    alt: s.geometry.coordinates[2] || 80,
+  }));
+
+  const lats = coords.map((c) => c.lat);
+  const lons = coords.map((c) => c.lon);
+  const minLat = Math.min(...lats);
+  const maxLat = Math.max(...lats);
+  const minLon = Math.min(...lons);
+  const maxLon = Math.max(...lons);
+
+  const midLat = (minLat + maxLat) / 2;
+  const mPerDegLat = 111320;
+  const mPerDegLon = 111320 * Math.cos((midLat * Math.PI) / 180);
+
+  const hfovRad = (73 * Math.PI) / 180;
+  const vfovRad = (56 * Math.PI) / 180;
+
+  const pad = 0.3;
+  const spanLat = (maxLat - minLat) * (1 + pad) || 0.001;
+  const spanLon = (maxLon - minLon) * (1 + pad) || 0.001;
+  const originLat = minLat - (spanLat * pad) / 2;
+  const originLon = minLon - (spanLon * pad) / 2;
+
+  const RES = 400;
+  const aspectRatio = (spanLon * mPerDegLon) / (spanLat * mPerDegLat);
+  const W = Math.round(RES * Math.max(1, aspectRatio));
+  const H = Math.round(RES / Math.min(1, aspectRatio));
+  const grid = new Uint8Array(W * H);
+
+  for (const c of coords) {
+    const halfW_m = c.alt * Math.tan(hfovRad / 2);
+    const halfH_m = c.alt * Math.tan(vfovRad / 2);
+    const halfW_deg = halfW_m / mPerDegLon;
+    const halfH_deg = halfH_m / mPerDegLat;
+
+    const x0 = Math.max(0, Math.floor(((c.lon - halfW_deg - originLon) / spanLon) * W));
+    const x1 = Math.min(W - 1, Math.ceil(((c.lon + halfW_deg - originLon) / spanLon) * W));
+    const y0 = Math.max(0, Math.floor(((c.lat - halfH_deg - originLat) / spanLat) * H));
+    const y1 = Math.min(H - 1, Math.ceil(((c.lat + halfH_deg - originLat) / spanLat) * H));
+
+    for (let y = y0; y <= y1; y++) {
+      for (let x = x0; x <= x1; x++) {
+        const idx = (H - 1 - y) * W + x;
+        if (grid[idx] < 255) grid[idx]++;
+      }
+    }
+  }
+
+  const canvas = document.createElement("canvas");
+  canvas.width = W;
+  canvas.height = H;
+  const ctx = canvas.getContext("2d");
+  const imageData = ctx.createImageData(W, H);
+  const d = imageData.data;
+
+  let maxCount = 0;
+  for (let i = 0; i < grid.length; i++) if (grid[i] > maxCount) maxCount = grid[i];
+
+  for (let i = 0; i < grid.length; i++) {
+    const count = grid[i];
+    const pi = i * 4;
+    if (count === 0) {
+      d[pi] = 20; d[pi + 1] = 22; d[pi + 2] = 30; d[pi + 3] = 255;
+    } else {
+      const t = count / Math.max(maxCount, 1);
+      if (t > 0.5) {
+        d[pi] = Math.round(30 + (1 - t) * 200);
+        d[pi + 1] = Math.round(100 + t * 155);
+        d[pi + 2] = Math.round(255 * (1 - t) * 0.4);
+      } else {
+        d[pi] = Math.round(255 * (1 - t * 2) + 30 * t * 2);
+        d[pi + 1] = Math.round(80 * t * 2 + 50);
+        d[pi + 2] = 20;
+      }
+      d[pi + 3] = 255;
+    }
+  }
+
+  ctx.putImageData(imageData, 0, 0);
+
+  ctx.fillStyle = "rgba(0,0,0,0.6)";
+  ctx.fillRect(W - 110, H - 80, 106, 76);
+  ctx.font = "bold 11px sans-serif";
+  ctx.fillStyle = "#e6edf3";
+  ctx.fillText("Coverage", W - 104, H - 63);
+  ctx.font = "10px sans-serif";
+  const steps = [
+    [maxCount + "+", "#64ff96"],
+    [Math.round(maxCount * 0.5) + "", "#d4a030"],
+    ["1", "#ff5040"],
+    ["0", "#161b22"],
+  ];
+  steps.forEach(([label, color], i) => {
+    const y = H - 50 + i * 14;
+    ctx.fillStyle = color;
+    ctx.fillRect(W - 104, y, 10, 10);
+    ctx.fillStyle = "#e6edf3";
+    ctx.fillText(label + " photos", W - 90, y + 9);
+  });
+
+  return canvas.toDataURL("image/png");
+}
 
 function showMaps(project) {
   const bar = document.getElementById("layer-bar");
   const buttons = document.getElementById("layer-buttons");
-  const available = LAYERS.filter((layer) => project.layers[layer.key]);
+  const available = LAYERS.filter((layer) =>
+    layer.computed ? replay.shots.length > 0 : project.layers[layer.key]
+  );
 
   buttons.innerHTML = "";
   if (!available.length) {
@@ -157,6 +277,21 @@ function setLayer(project, layer) {
   legend.classList.toggle("hidden", !legendPath);
   if (legendPath) legend.src = `/files/${project.name}/${legendPath}`;
 
+  if (layer.computed && layer.key === "coverage") {
+    status.classList.remove("hidden");
+    status.textContent = "Computing coverage…";
+    frame.classList.remove("ready");
+    const dataUrl = renderCoverageHeatmap(replay.shots);
+    if (dataUrl) {
+      img.onload = () => { status.classList.add("hidden"); frame.classList.add("ready"); };
+      img.onerror = () => { status.textContent = "Coverage render failed"; };
+      img.src = dataUrl;
+    } else {
+      status.textContent = "Not enough data to compute coverage";
+    }
+    return;
+  }
+
   status.classList.remove("hidden");
   status.textContent = `Loading ${layer.label.toLowerCase()}…`;
   frame.classList.remove("ready");
@@ -180,7 +315,7 @@ async function showStats(project) {
 
   let stats;
   try {
-    stats = await (await fetch(`/api/projects/${project.name}/stats`)).json();
+    stats = await (await fetch(`api/projects/${project.name}/stats`)).json();
   } catch {
     body.textContent = "Could not load survey data";
     return;
@@ -635,7 +770,7 @@ async function showReplay(project) {
 
   let shots;
   try {
-    shots = await (await fetch(`/api/projects/${project.name}/shots`)).json();
+    shots = await (await fetch(`api/projects/${project.name}/shots`)).json();
   } catch {
     status.textContent = "Could not load flight data";
     return;
@@ -649,6 +784,8 @@ async function showReplay(project) {
   replay.shots = shots;
   status.classList.add("hidden");
   container.classList.add("ready");
+
+  showMaps(project);
 
   if (state.view === "replay") setTimeout(() => initReplayMap(), 50);
 }
@@ -706,8 +843,75 @@ function buildReplayMap() {
   scrubber.value = 0;
   replay.currentIndex = 0;
 
+  buildReplayGraphs(shots);
+
   document.getElementById("replay-pip").classList.remove("hidden");
   updateReplayPosition(0);
+}
+
+function buildReplayGraphs(shots) {
+  const altitudes = shots.map((s) => s.geometry.coordinates[2] ?? null);
+  const speeds = shots.map((s) => {
+    if (!s.properties.capture_time) return null;
+    return null;
+  });
+
+  const t0 = shots[0].properties.capture_time || 0;
+  for (let i = 1; i < shots.length; i++) {
+    const dt =
+      ((shots[i].properties.capture_time || 0) - (shots[i - 1].properties.capture_time || 0));
+    if (dt > 0) {
+      const c0 = shots[i - 1].geometry.coordinates;
+      const c1 = shots[i].geometry.coordinates;
+      const dlat = (c1[1] - c0[1]) * 111320;
+      const dlon = (c1[0] - c0[0]) * 111320 * Math.cos((c1[1] * Math.PI) / 180);
+      const dist = Math.sqrt(dlat * dlat + dlon * dlon);
+      speeds[i] = dist / dt;
+    }
+  }
+
+  drawSparkline("graph-altitude", altitudes, "#4aa3ff", "Altitude (m)");
+  drawSparkline("graph-speed", speeds, "#3fb950", "Speed (m/s)");
+  document.getElementById("replay-graphs").classList.remove("hidden");
+  replay.graphAltitudes = altitudes;
+  replay.graphSpeeds = speeds;
+}
+
+function drawSparkline(canvasId, values, color, label) {
+  const canvas = document.getElementById(canvasId);
+  const dpr = window.devicePixelRatio || 1;
+  const w = canvas.clientWidth;
+  const h = canvas.clientHeight;
+  canvas.width = w * dpr;
+  canvas.height = h * dpr;
+  const ctx = canvas.getContext("2d");
+  ctx.scale(dpr, dpr);
+
+  const valid = values.filter((v) => v != null);
+  if (!valid.length) return;
+  const min = Math.min(...valid);
+  const max = Math.max(...valid);
+  const range = max - min || 1;
+  const pad = 14;
+
+  ctx.beginPath();
+  let started = false;
+  for (let i = 0; i < values.length; i++) {
+    if (values[i] == null) continue;
+    const x = (i / (values.length - 1)) * w;
+    const y = pad + (1 - (values[i] - min) / range) * (h - pad * 2);
+    if (!started) { ctx.moveTo(x, y); started = true; } else ctx.lineTo(x, y);
+  }
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+
+  ctx.fillStyle = "rgba(139,152,169,0.7)";
+  ctx.font = "10px sans-serif";
+  ctx.fillText(label, 4, 10);
+  ctx.textAlign = "right";
+  ctx.fillText(`${max.toFixed(1)}`, w - 4, 10);
+  ctx.fillText(`${min.toFixed(1)}`, w - 4, h - 3);
 }
 
 function updateReplayPosition(index) {
@@ -732,8 +936,35 @@ function updateReplayPosition(index) {
   const props = shot.properties;
   const time = props.capture_time ? new Date(props.capture_time * 1000).toLocaleString() : "";
   const alt = coords[2] != null ? coords[2].toFixed(1) + " m" : "";
+  const spd = replay.graphSpeeds && replay.graphSpeeds[idx] != null
+    ? replay.graphSpeeds[idx].toFixed(1) + " m/s" : "";
   document.getElementById("replay-info").innerHTML =
-    `<span>${props.filename || ""}</span><span>${alt}</span><span>${time}</span>`;
+    `<span>${props.filename || ""}</span><span>${alt}</span><span>${spd}</span><span>${time}</span>`;
+
+  updateGraphPlayhead(idx);
+}
+
+function updateGraphPlayhead(idx) {
+  if (!replay.graphAltitudes) return;
+  const total = replay.shots.length;
+  for (const id of ["graph-altitude", "graph-speed"]) {
+    const canvas = document.getElementById(id);
+    const values = id === "graph-altitude" ? replay.graphAltitudes : replay.graphSpeeds;
+    const color = id === "graph-altitude" ? "#4aa3ff" : "#3fb950";
+    const label = id === "graph-altitude" ? "Altitude (m)" : "Speed (m/s)";
+    drawSparkline(id, values, color, label);
+    const ctx = canvas.getContext("2d");
+    const dpr = window.devicePixelRatio || 1;
+    const w = canvas.clientWidth;
+    const h = canvas.clientHeight;
+    const x = (idx / (total - 1)) * w * dpr;
+    ctx.strokeStyle = "rgba(255,255,255,0.5)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(x, 0);
+    ctx.lineTo(x, h * dpr);
+    ctx.stroke();
+  }
 }
 
 function playReplay() {
@@ -816,47 +1047,193 @@ function exportReport() {
   if (!project || !stats || !stats.geotagged) return;
 
   const name = escHtml(project.name);
-  const orthoSrc = project.layers.ortho
-    ? `${location.origin}/files/${project.name}/${project.layers.ortho}` : "";
+  const base = `${location.origin}/files/${project.name}/`;
+  const L = project.layers;
   const allTagged = stats.geotagged === stats.photos;
-  const date = new Date().toLocaleDateString();
+  const date = new Date().toLocaleDateString(undefined, {
+    year: "numeric", month: "long", day: "numeric",
+  });
+
+  const modelCanvas = document.getElementById("model-canvas");
+  let modelSnap = "";
+  if (modelCanvas && modelCanvas.width > 0) {
+    const tmp = document.createElement("canvas");
+    const tmpCtx = tmp.getContext("2d");
+    tmp.width = modelCanvas.width;
+    tmp.height = modelCanvas.height;
+    tmpCtx.drawImage(modelCanvas, 0, 0);
+    const px = tmpCtx.getImageData(0, 0, tmp.width, tmp.height).data;
+    let t = tmp.height, b = 0, l = tmp.width, r = 0;
+    for (let y = 0; y < tmp.height; y++) {
+      for (let x = 0; x < tmp.width; x++) {
+        const i = (y * tmp.width + x) * 4;
+        if (px[i] > 10 || px[i + 1] > 10 || px[i + 2] > 10) {
+          if (y < t) t = y; if (y > b) b = y;
+          if (x < l) l = x; if (x > r) r = x;
+        }
+      }
+    }
+    if (r > l && b > t) {
+      const pad = 20;
+      l = Math.max(0, l - pad); t = Math.max(0, t - pad);
+      r = Math.min(tmp.width - 1, r + pad); b = Math.min(tmp.height - 1, b + pad);
+      const crop = document.createElement("canvas");
+      crop.width = r - l + 1; crop.height = b - t + 1;
+      const cc = crop.getContext("2d");
+      cc.fillStyle = "#111";
+      cc.fillRect(0, 0, crop.width, crop.height);
+      cc.drawImage(tmp, l, t, crop.width, crop.height, 0, 0, crop.width, crop.height);
+      modelSnap = crop.toDataURL("image/png");
+    } else {
+      modelSnap = modelCanvas.toDataURL("image/png");
+    }
+  }
+
+  function layerImg(key, alt, cls) {
+    return L[key] ? `<img class="${cls}" src="${base}${L[key]}" alt="${alt}">` : "";
+  }
+
+  function stat(label, value, sub) {
+    return `<div class="stat"><div class="stat-val">${value}</div><div class="stat-label">${label}</div>${sub ? `<div class="stat-sub">${sub}</div>` : ""}</div>`;
+  }
 
   const html = `<!doctype html>
 <html><head><meta charset="utf-8">
 <title>Survey Report — ${name}</title>
 <style>
-body{font-family:"Segoe UI",system-ui,sans-serif;color:#1a1a1a;max-width:800px;margin:0 auto;padding:40px 30px}
-h1{font-size:22px;margin:0 0 4px}
-.date{color:#666;font-size:14px;margin-bottom:24px}
-.ortho{max-width:600px;border-radius:6px;margin-bottom:24px}
-h2{font-size:15px;color:#444;border-bottom:1px solid #ddd;padding-bottom:6px;margin:24px 0 12px}
-table{border-collapse:collapse;width:100%;margin-bottom:20px}
-td{padding:8px 12px;border-bottom:1px solid #eee;font-size:14px}
-td:first-child{color:#666;width:45%}
-.footer{margin-top:40px;padding-top:16px;border-top:1px solid #ddd;color:#999;font-size:12px}
-@media print{body{padding:20px}}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:"Segoe UI",system-ui,-apple-system,sans-serif;color:#1a1a1a;max-width:900px;margin:0 auto;padding:0 36px 40px}
+@media print{body{padding:0 20px 20px}
+  .page-break{page-break-before:always}
+  .no-break{page-break-inside:avoid}}
+
+/* header */
+.header{padding:32px 0 24px;border-bottom:3px solid #2563eb;margin-bottom:28px}
+.header h1{font-size:28px;font-weight:700;color:#111}
+.header .sub{display:flex;gap:24px;margin-top:6px;font-size:14px;color:#666}
+
+/* stat cards */
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:32px}
+.stat{background:#f7f8fa;border-radius:8px;padding:16px 18px;border:1px solid #e5e7eb}
+.stat-val{font-size:22px;font-weight:700;color:#111}
+.stat-label{font-size:12px;text-transform:uppercase;letter-spacing:0.5px;color:#888;margin-top:2px}
+.stat-sub{font-size:12px;color:#666;margin-top:4px}
+
+/* sections */
+h2{font-size:18px;font-weight:600;color:#111;margin:28px 0 14px;padding-bottom:8px;border-bottom:2px solid #e5e7eb}
+.section-note{font-size:13px;color:#666;margin:-8px 0 14px;line-height:1.5}
+
+/* images */
+.layer{margin-bottom:28px}
+.layer img.full{width:100%;border-radius:6px;border:1px solid #e5e7eb}
+.layer-with-legend{display:flex;flex-direction:column;gap:12px}
+.layer-with-legend img.full{width:100%;min-width:0}
+.layer-with-legend .legend-wrap{display:flex;align-items:center;gap:10px}
+.layer-with-legend .legend-wrap img{height:20px;width:100%;max-width:400px;border-radius:4px;border:1px solid #e5e7eb}
+.layer-with-legend .legend-wrap span{font-size:11px;color:#888;white-space:nowrap}
+.layer .caption{font-size:13px;color:#666;margin-top:8px;font-style:italic}
+
+/* model snapshot */
+.model-snap{width:100%;max-height:400px;object-fit:contain;border-radius:6px;border:1px solid #e5e7eb;background:#111}
+
+/* tables */
+table{border-collapse:collapse;width:100%;margin:0 0 20px}
+th{text-align:left;font-size:12px;text-transform:uppercase;letter-spacing:0.5px;color:#888;padding:6px 14px;border-bottom:2px solid #e5e7eb}
+td{padding:10px 14px;border-bottom:1px solid #f0f0f0;font-size:14px}
+td:first-child{color:#555;font-weight:500}
+tr:last-child td{border-bottom:none}
+
+/* products */
+.products{display:flex;flex-wrap:wrap;gap:10px;margin:14px 0 28px}
+.product{display:inline-block;padding:8px 16px;background:#f0f4ff;color:#2563eb;border-radius:6px;font-size:13px;font-weight:500;text-decoration:none;border:1px solid #dbeafe}
+
+/* footer */
+.footer{margin-top:40px;padding-top:16px;border-top:2px solid #e5e7eb;color:#aaa;font-size:12px;display:flex;justify-content:space-between}
 </style></head><body>
-<h1>${name}</h1>
-<p class="date">${date}</p>
-${orthoSrc ? `<img class="ortho" src="${orthoSrc}" alt="Orthomosaic">` : ""}
-<h2>Summary</h2>
+
+<div class="header">
+  <h1>Survey Report — ${name}</h1>
+  <div class="sub"><span>${date}</span><span>${stats.photos} photos</span><span>${Math.round(stats.extent_m.width)} × ${Math.round(stats.extent_m.height)} m</span></div>
+</div>
+
+<div class="stats">
+  ${stat("Photos captured", stats.photos)}
+  ${stat("Geotagged", `${stats.geotagged} / ${stats.photos}`, allTagged ? "All photos have GPS" : "Some photos lack GPS")}
+  ${stat("Camera heading", `${Math.round((stats.with_heading / stats.geotagged) * 100)}%`, stats.with_heading > 0 ? "Recorded" : "Not recorded by camera")}
+  ${stat("Area covered", `${Math.round(stats.extent_m.width)} × ${Math.round(stats.extent_m.height)} m`)}
+  ${stat("Mean altitude", `${stats.altitude.mean.toFixed(0)} m`, "Above sea level")}
+  ${stat("Photo spacing", stats.spacing_m.median ? stats.spacing_m.median.toFixed(1) + " m" : "—", "Median between shots")}
+</div>
+
+<h2>Orthomosaic</h2>
+<p class="section-note">Every photo reprojected as though shot from directly overhead, then stitched. Distances and areas measured on this image are true to the ground.</p>
+<div class="layer">
+  ${layerImg("ortho", "Orthomosaic", "full")}
+</div>
+
+${L.elevation ? `
+<h2>Elevation model</h2>
+<p class="section-note">Digital surface model — the height of the ground and everything standing on it. Colour runs from low to high.</p>
+<div class="layer page-break no-break">
+  <div class="layer-with-legend">
+    ${layerImg("elevation", "Elevation map", "full")}
+    ${L.elevation_legend ? `<div class="legend-wrap"><img src="${base}${L.elevation_legend}" alt="Legend"><span>Elevation scale</span></div>` : ""}
+  </div>
+</div>
+` : ""}
+
+${L.overlap ? `
+<h2>Photo overlap</h2>
+<p class="section-note">How many photos see each point. Green is well-covered; yellow and red mark thin coverage where reconstruction degrades.</p>
+<div class="layer no-break">
+  <div class="layer-with-legend">
+    ${layerImg("overlap", "Photo overlap", "full")}
+    ${L.overlap_legend ? `<div class="legend-wrap"><img src="${base}${L.overlap_legend}" alt="Legend"><span>Overlap count</span></div>` : ""}
+  </div>
+</div>
+` : ""}
+
+${L.cameras ? `
+<h2>Camera positions</h2>
+<p class="section-note">Where each photo was taken. Positions are the solved camera locations from the reconstruction, joined in capture order.</p>
+<div class="layer no-break">
+  ${layerImg("cameras", "Camera positions", "full")}
+</div>
+` : ""}
+
+${modelSnap ? `
+<h2>3D reconstruction</h2>
+<p class="section-note">Textured mesh built from overlapping photo coverage.</p>
+<div class="layer page-break no-break">
+  <img class="model-snap" src="${modelSnap}" alt="3D model">
+</div>
+` : ""}
+
+<h2 class="page-break">Survey extent</h2>
 <table>
-<tr><td>Photos</td><td>${stats.photos}</td></tr>
-<tr><td>Geotagged</td><td>${stats.geotagged} / ${stats.photos}${allTagged ? " (all)" : ""}</td></tr>
-<tr><td>Area covered</td><td>${Math.round(stats.extent_m.width)} × ${Math.round(stats.extent_m.height)} m</td></tr>
-<tr><td>Mean altitude</td><td>${stats.altitude.mean.toFixed(1)} m</td></tr>
-<tr><td>Photo spacing (median)</td><td>${stats.spacing_m.median ? stats.spacing_m.median.toFixed(1) + " m" : "—"}</td></tr>
+  <tr><th colspan="2">Location</th></tr>
+  <tr><td>Centre</td><td>${stats.centre.lat.toFixed(6)}, ${stats.centre.lon.toFixed(6)}</td></tr>
+  <tr><td>North / South</td><td>${stats.bounds.north.toFixed(6)} / ${stats.bounds.south.toFixed(6)}</td></tr>
+  <tr><td>East / West</td><td>${stats.bounds.east.toFixed(6)} / ${stats.bounds.west.toFixed(6)}</td></tr>
 </table>
-<h2>Survey extent</h2>
 <table>
-<tr><td>Centre</td><td>${stats.centre.lat.toFixed(6)}, ${stats.centre.lon.toFixed(6)}</td></tr>
-<tr><td>North / South</td><td>${stats.bounds.north.toFixed(6)} / ${stats.bounds.south.toFixed(6)}</td></tr>
-<tr><td>East / West</td><td>${stats.bounds.east.toFixed(6)} / ${stats.bounds.west.toFixed(6)}</td></tr>
-<tr><td>Altitude range</td><td>${stats.altitude.min.toFixed(1)} – ${stats.altitude.max.toFixed(1)} m</td></tr>
-<tr><td>Spacing range</td><td>${stats.spacing_m.min != null ? stats.spacing_m.min.toFixed(1) + " – " + stats.spacing_m.max.toFixed(1) + " m" : "—"}</td></tr>
+  <tr><th colspan="2">Flight parameters</th></tr>
+  <tr><td>Altitude range</td><td>${stats.altitude.min.toFixed(1)} – ${stats.altitude.max.toFixed(1)} m</td></tr>
+  <tr><td>Mean altitude</td><td>${stats.altitude.mean.toFixed(1)} m</td></tr>
+  <tr><td>Spacing (median)</td><td>${stats.spacing_m.median != null ? stats.spacing_m.median.toFixed(1) + " m" : "—"}</td></tr>
+  <tr><td>Spacing range</td><td>${stats.spacing_m.min != null ? stats.spacing_m.min.toFixed(1) + " – " + stats.spacing_m.max.toFixed(1) + " m" : "—"}</td></tr>
 </table>
-<div class="footer">Generated by drone-gcs</div>
-<script>window.onload=()=>setTimeout(()=>window.print(),500)<\/script>
+
+<h2>Data products</h2>
+<div class="products">${Object.entries(project.products).filter(([, p]) => p).map(([k]) =>
+  `<span class="product">${k.replace(/_/g, " ")}</span>`).join("")}
+</div>
+
+<div class="footer">
+  <span>Generated by drone-gcs</span>
+  <span>${name} — ${date}</span>
+</div>
+<script>window.onload=()=>setTimeout(()=>window.print(),800)<\/script>
 </body></html>`;
 
   const w = window.open("", "_blank");

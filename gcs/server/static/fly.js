@@ -20,9 +20,22 @@
     trackPoints: [],
     timer: null,
     polling: false,
+    lastBatteryWarn: null,
+    seenMessages: 0,
+    staleLevel: 0,
   };
 
   const el = (id) => document.getElementById(id);
+
+  const TELE_LABELS = ["Mode", "Altitude", "Speed", "Battery", "GPS", "Wind", "Photos", "HDOP"];
+
+  function renderSkeleton() {
+    const panel = el("telemetry");
+    panel.innerHTML = TELE_LABELS
+      .map((k) => `<div class="tele"><span>${k}</span><b>&mdash;</b></div>`)
+      .join("");
+  }
+  renderSkeleton();
 
   // -- connection ---------------------------------------------------------
 
@@ -30,7 +43,7 @@
     const url = el("in-companion").value.trim();
     setLink("Connecting…", "muted");
     try {
-      const response = await fetch("/api/companion/connect", {
+      const response = await fetch("api/companion/connect", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ url: url || null }),
@@ -39,6 +52,11 @@
       if (!response.ok) throw new Error(data.detail || "connection failed");
 
       fly.connected = true;
+      if (window.planner) {
+        window.planner.flyState = window.planner.flyState || {};
+        window.planner.flyState.connected = true;
+        window.planner.updateSteps();
+      }
       el("in-companion").value = data.url;
       const h = data.health;
       setSimulatorBanner(h.simulated, h.simulated_reasons, h.fc_endpoint);
@@ -54,14 +72,27 @@
   });
 
   el("btn-disconnect").addEventListener("click", async () => {
-    await fetch("/api/companion/disconnect", { method: "POST" });
+    await fetch("api/companion/disconnect", { method: "POST" });
     fly.connected = false;
+    if (window.planner) {
+      window.planner.flyState = window.planner.flyState || {};
+      window.planner.flyState.connected = false;
+      window.planner.flyState.missionUploaded = false;
+      window.planner.updateSteps();
+    }
     stopPolling();
     setLink("Not connected.", "muted");
     setSimulatorBanner(false);
-    el("telemetry").classList.add("hidden");
+    el("telemetry").classList.add("skeleton");
+    renderSkeleton();
     el("preflight").innerHTML = "";
     el("btn-upload").disabled = true;
+    el("diag-link").innerHTML = '<span class="muted">No data yet</span>';
+    el("diag-log").innerHTML = "";
+    el("flight-controls").classList.add("hidden");
+    stopPreview();
+    el("camera-preview-container").classList.add("hidden");
+    fly.seenMessages = 0;
     clearAircraft();
   });
 
@@ -106,28 +137,67 @@
 
     let data;
     try {
-      data = await (await fetch("/api/companion/status")).json();
+      data = await (await fetch("api/companion/status")).json();
     } catch {
       return showStale();
     } finally {
       fly.polling = false;
     }
 
-    if (!data.connected) return showStale(data.error);
+    if (!data.connected) return showStale(data.error, data.reconnecting);
 
     fly.lastFix = Date.now();
+    fly.staleLevel = 0;
     showTelemetry(data);
+    updateDiagnostics(data);
     updateAircraft(data.vehicle);
+    updateFlightControls(data.vehicle.mode, data.vehicle.armed);
   }
 
-  function showStale(detail) {
+  function showStale(detail, reconnecting) {
     const age = fly.lastFix ? (Date.now() - fly.lastFix) / 1000 : null;
     if (age === null || age * 1000 > STALE_AFTER_MS) {
+      const suffix = reconnecting
+        ? " Reconnecting…"
+        : " The aircraft is flying the mission from its own memory and will return on its own.";
       setLink(
-        `Link lost${detail ? " — " + detail : ""}. The aircraft is flying the ` +
-        "mission from its own memory and will return on its own.",
-        "warn"
+        `Link lost${age != null ? " (" + Math.round(age) + "s)" : ""}${detail ? " — " + detail : ""}.${suffix}`,
+        age != null && age > 60 ? "bad" : "warn"
       );
+
+      if (age != null && age > 15 && fly.staleLevel < 1) {
+        fly.staleLevel = 1;
+        toast("No telemetry for 15 seconds — link may be down", "warn");
+      }
+      if (age != null && age > 60 && fly.staleLevel < 2) {
+        fly.staleLevel = 2;
+        toast("No telemetry for 60 seconds — consider RTL", "bad");
+      }
+    }
+  }
+
+  function batteryGauge(pct, voltage) {
+    if (pct == null && voltage == null) return "—";
+    const level = pct != null ? pct : null;
+    const tone = level == null ? "muted" : level > 40 ? "good" : level > 20 ? "warn" : "bad";
+    const fill = level != null ? Math.max(0, Math.min(100, level)) : 0;
+    const vStr = voltage != null ? voltage.toFixed(1) + " V" : "";
+    const pStr = level != null ? level + "%" : "";
+    const label = [pStr, vStr].filter(Boolean).join(" · ");
+    return `<span class="batt-gauge"><span class="batt-shell"><span class="batt-fill ${tone}" style="width:${fill}%"></span></span></span>${label}`;
+  }
+
+  function checkBatteryWarning(v) {
+    const pct = v.battery_remaining_pct;
+    if (pct == null) return;
+    if (pct <= 15 && fly.lastBatteryWarn !== "critical") {
+      fly.lastBatteryWarn = "critical";
+      toast("BATTERY CRITICAL — " + pct + "% — LAND NOW", "bad");
+    } else if (pct <= 30 && pct > 15 && fly.lastBatteryWarn == null) {
+      fly.lastBatteryWarn = "low";
+      toast("Battery low — " + pct + "% remaining", "warn");
+    } else if (pct > 40) {
+      fly.lastBatteryWarn = null;
     }
   }
 
@@ -135,15 +205,17 @@
     const v = data.vehicle;
     const s = data.session;
     const panel = el("telemetry");
-    panel.classList.remove("hidden");
+    panel.classList.remove("skeleton");
+
+    checkBatteryWarning(v);
 
     const cells = [
       ["Mode", v.mode + (v.armed ? " · ARMED" : "")],
       ["Altitude", v.relative_alt_m == null ? "—" : `${v.relative_alt_m.toFixed(1)} m`],
       ["Speed", v.ground_speed_ms == null ? "—" : `${v.ground_speed_ms.toFixed(1)} m/s`],
-      ["Battery", v.battery_v == null ? "—" : `${v.battery_v.toFixed(1)} V`],
+      ["Battery", batteryGauge(v.battery_remaining_pct, v.battery_v)],
       ["GPS", `${v.gps_fix} · ${v.satellites} sats`],
-      ["Waypoint", v.mission_seq == null ? "—" : v.mission_seq],
+      ["Wind", v.wind_speed_ms != null ? `${v.wind_speed_ms.toFixed(1)} m/s` : "—"],
       ["Photos", s ? `${s.captured}${s.failed ? ` (${s.failed} failed)` : ""}` : "—"],
       ["HDOP", v.hdop == null ? "—" : v.hdop.toFixed(1)],
     ];
@@ -151,6 +223,35 @@
     panel.innerHTML = cells
       .map(([k, val]) => `<div class="tele"><span>${k}</span><b>${val}</b></div>`)
       .join("");
+  }
+
+  function updateDiagnostics(data) {
+    const v = data.vehicle;
+    const link = el("diag-link");
+    const log = el("diag-log");
+
+    const current = v.battery_current_a != null ? v.battery_current_a.toFixed(1) + " A" : "—";
+    const pct = v.battery_remaining_pct != null ? v.battery_remaining_pct + "%" : "—";
+    const voltage = v.battery_v != null ? v.battery_v.toFixed(2) + " V" : "—";
+    link.innerHTML =
+      `<b>Power</b> ${voltage} · ${current} · ${pct}` +
+      (v.hdop != null ? ` &nbsp; <b>HDOP</b> ${v.hdop.toFixed(2)}` : "") +
+      (data.session ? ` &nbsp; <b>Session</b> ${data.session.elapsed_s}s` : "");
+
+    const messages = v.messages || [];
+    if (messages.length > fly.seenMessages) {
+      const newMsgs = messages.slice(fly.seenMessages);
+      for (const msg of newMsgs) {
+        const div = document.createElement("div");
+        const lower = msg.toLowerCase();
+        div.className = "msg" + (lower.includes("error") || lower.includes("fail") ? " err"
+          : lower.includes("warn") || lower.includes("bad") ? " warn" : "");
+        div.textContent = msg;
+        log.appendChild(div);
+      }
+      log.scrollTop = log.scrollHeight;
+      fly.seenMessages = messages.length;
+    }
   }
 
   // -- live map -----------------------------------------------------------
@@ -207,6 +308,100 @@
     fly.trackPoints = [];
   }
 
+  // -- flight controls ----------------------------------------------------
+
+  async function sendMode(mode) {
+    try {
+      const response = await fetch("api/companion/mode", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mode }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.detail || "mode change failed");
+      toast(data.confirmed ? mode + " confirmed" : mode + " sent (unconfirmed)", data.confirmed ? "good" : "warn");
+    } catch (error) {
+      toast("Mode change failed: " + (error.message || error), "bad");
+    }
+  }
+
+  el("btn-fc-pause").addEventListener("click", () => sendMode("LOITER"));
+  el("btn-fc-resume").addEventListener("click", () => sendMode("AUTO"));
+  el("btn-fc-rtl").addEventListener("click", () => sendMode("RTL"));
+  el("btn-fc-land").addEventListener("click", () => sendMode("LAND"));
+
+  el("btn-fc-arm").addEventListener("click", async () => {
+    if (!confirm("Arm the motors? Propellers will spin.\n\nStand clear of the aircraft.")) return;
+    try {
+      const response = await fetch("api/companion/arm", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ arm: true }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.detail || "arm failed");
+      toast(data.accepted ? "Armed" : "Arm rejected — check pre-arm", data.accepted ? "good" : "warn");
+    } catch (error) {
+      toast("Arm failed: " + (error.message || error), "bad");
+    }
+  });
+
+  el("btn-fc-disarm").addEventListener("click", async () => {
+    if (!confirm("Disarm the motors?\n\nIf the aircraft is airborne, it WILL FALL.")) return;
+    if (!confirm("CONFIRM DISARM\n\nThis immediately cuts all motor power.\nAre you absolutely sure?")) return;
+    try {
+      const response = await fetch("api/companion/arm", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ arm: false }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.detail || "disarm failed");
+      toast(data.accepted ? "Disarmed" : "Disarm rejected", data.accepted ? "good" : "warn");
+    } catch (error) {
+      toast("Disarm failed: " + (error.message || error), "bad");
+    }
+  });
+
+  function updateFlightControls(mode, armed) {
+    var panel = el("flight-controls");
+    if (!fly.connected) { panel.classList.add("hidden"); return; }
+    panel.classList.remove("hidden");
+
+    var map = { LOITER: "btn-fc-pause", AUTO: "btn-fc-resume", RTL: "btn-fc-rtl", LAND: "btn-fc-land" };
+    document.querySelectorAll(".fc-btn.pause,.fc-btn.resume,.fc-btn.rtl,.fc-btn.land").forEach(function (btn) { btn.classList.remove("active-mode"); });
+    var active = map[mode];
+    if (active) el(active).classList.add("active-mode");
+
+    el("btn-fc-arm").classList.toggle("active-mode", !!armed);
+    el("btn-fc-disarm").classList.toggle("active-mode", !armed);
+  }
+
+  // -- camera preview -----------------------------------------------------
+
+  var previewTimer = null;
+
+  el("btn-preview-start").addEventListener("click", function () {
+    el("camera-preview-container").classList.remove("hidden");
+    el("btn-preview-start").classList.add("hidden");
+    el("btn-preview-stop").classList.remove("hidden");
+    pollPreview();
+    previewTimer = setInterval(pollPreview, 1000);
+  });
+
+  el("btn-preview-stop").addEventListener("click", stopPreview);
+
+  function stopPreview() {
+    if (previewTimer) clearInterval(previewTimer);
+    previewTimer = null;
+    el("btn-preview-stop").classList.add("hidden");
+    el("btn-preview-start").classList.remove("hidden");
+  }
+
+  function pollPreview() {
+    el("camera-preview").src = "api/companion/preview?" + Date.now();
+  }
+
   // -- pre-flight ---------------------------------------------------------
 
   el("btn-preflight").addEventListener("click", runPreflight);
@@ -221,7 +416,7 @@
     let report;
     try {
       const response = await fetch(
-        `/api/companion/preflight?mission_waypoints=${waypoints}&estimated_photos=${photos}`
+        `api/companion/preflight?mission_waypoints=${waypoints}&estimated_photos=${photos}`
       );
       report = await response.json();
       if (!response.ok) throw new Error(report.detail || "check failed");
@@ -264,16 +459,16 @@
     result.innerHTML = '<p class="muted">Uploading and verifying…</p>';
 
     try {
-      const response = await fetch("/api/companion/mission", {
+      const response = await fetch("api/companion/mission", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           waypoints: plan.waypoints,
           altitude_m: Number(document.getElementById("in-altitude").value),
           trigger_distance_m: plan.stats.photo_spacing_m,
+          ground_speed_ms: Number(document.getElementById("in-speed").value),
+          terrain: document.getElementById("in-terrain").checked,
           home: plan.waypoints[0],
-          // The drawn boundary becomes the fence exactly, so obstacles routed
-          // around on the map are routed around in the air.
           boundary: window.planner.state.vertices,
         }),
       });
@@ -295,9 +490,133 @@
       result.innerHTML = `<p class="check good"><b>Mission uploaded</b>
         <span>${data.items} items, verified by readback. Camera every
         ${data.trigger_distance_m} m.</span></p>` + fence;
+      if (window.planner) {
+        window.planner.flyState = window.planner.flyState || {};
+        window.planner.flyState.missionUploaded = true;
+        window.planner.updateSteps();
+      }
     } catch (error) {
       result.innerHTML = `<p class="check bad"><b>Upload failed</b>
         <span>${error.message || error}</span></p>`;
     }
   });
+  // -- post-flight: offload -------------------------------------------------
+
+  el("btn-offload").addEventListener("click", async () => {
+    if (!fly.connected) { toast("Connect to the companion first.", "warn"); return; }
+
+    let sessions;
+    try {
+      const r = await fetch("api/companion/status");
+      const status = await r.json();
+      if (!status.connected) { toast("Companion not connected.", "warn"); return; }
+    } catch { toast("Could not reach the server.", "bad"); return; }
+
+    const sessionName = prompt("Session name to offload (leave blank for latest):");
+    if (sessionName === null) return;
+
+    const body = { session: sessionName || "latest" };
+    const panel = el("offload-status");
+    panel.innerHTML = '<span>Starting offload&hellip;</span>';
+    el("btn-offload").disabled = true;
+
+    try {
+      const r = await fetch("api/offload", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (!r.ok) {
+        const err = await r.json();
+        throw new Error(err.detail || "offload failed");
+      }
+      pollOffload(panel);
+    } catch (e) {
+      panel.innerHTML = `<span style="color:var(--bad)">${e.message}</span>`;
+      el("btn-offload").disabled = false;
+    }
+  });
+
+  function pollOffload(panel) {
+    const poll = async () => {
+      try {
+        const r = await fetch("api/offload/status");
+        const s = await r.json();
+        if (s.running) {
+          const pct = s.total ? Math.round((s.downloaded + s.skipped) / s.total * 100) : 0;
+          panel.innerHTML = `<span>Offloading: ${s.downloaded + s.skipped}/${s.total} photos (${pct}%)</span>` +
+            `<div class="bar"><div style="width:${pct}%"></div></div>`;
+          setTimeout(poll, 1000);
+        } else if (s.error) {
+          panel.innerHTML = `<span style="color:var(--bad)">Offload failed: ${s.error}</span>`;
+          el("btn-offload").disabled = false;
+          toast("Offload failed.", "bad");
+        } else {
+          panel.innerHTML = `<span style="color:var(--good)">${s.summary || "Offload complete."}</span>`;
+          el("btn-offload").disabled = false;
+          toast("Photo offload complete.", "good");
+        }
+      } catch {
+        panel.innerHTML = '<span style="color:var(--bad)">Lost connection during offload.</span>';
+        el("btn-offload").disabled = false;
+      }
+    };
+    poll();
+  }
+
+  // -- post-flight: reconstruct ---------------------------------------------
+
+  el("btn-reconstruct").addEventListener("click", async () => {
+    const projectName = prompt("Project name to reconstruct:");
+    if (!projectName) return;
+
+    const panel = el("reconstruct-status");
+    panel.innerHTML = '<span>Starting reconstruction&hellip;</span>';
+    el("btn-reconstruct").disabled = true;
+
+    try {
+      const r = await fetch("api/reconstruct", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ project: projectName }),
+      });
+      if (!r.ok) {
+        const err = await r.json();
+        throw new Error(err.detail || "reconstruction failed");
+      }
+      pollReconstruct(panel);
+    } catch (e) {
+      panel.innerHTML = `<span style="color:var(--bad)">${e.message}</span>`;
+      el("btn-reconstruct").disabled = false;
+    }
+  });
+
+  function pollReconstruct(panel) {
+    const poll = async () => {
+      try {
+        const r = await fetch("api/reconstruct/status");
+        const s = await r.json();
+        if (s.running) {
+          panel.innerHTML = `<span>${s.description || "Processing"}  (${s.percent}%)</span>` +
+            `<div class="bar"><div style="width:${s.percent}%"></div></div>`;
+          setTimeout(poll, 2000);
+        } else if (s.error) {
+          panel.innerHTML = `<span style="color:var(--bad)">Reconstruction failed: ${s.error}</span>`;
+          el("btn-reconstruct").disabled = false;
+          toast("Reconstruction failed.", "bad");
+        } else if (s.complete) {
+          panel.innerHTML = `<span style="color:var(--good)">Reconstruction complete.</span>`;
+          el("btn-reconstruct").disabled = false;
+          toast("Reconstruction complete.", "good");
+        } else {
+          panel.innerHTML = '';
+          el("btn-reconstruct").disabled = false;
+        }
+      } catch {
+        panel.innerHTML = '<span style="color:var(--bad)">Lost connection.</span>';
+        el("btn-reconstruct").disabled = false;
+      }
+    };
+    poll();
+  }
 })();
