@@ -1,0 +1,489 @@
+{
+  "project": {
+    "name": "Sheffield Park Survey",
+    "photos": 32,
+    "has_map": true,
+    "has_3d_model": true,
+    "layers": {},
+    "products": {}
+  },
+  "shots": [
+    {
+      "geometry": {
+        "coordinates": [
+          -82.69710327777779,
+          28.03920702777778,
+          0.688
+        ],
+        "type": "Point"
+      },
+      "properties": {
+        "filename": "DJI_0056.JPG",
+        "capture_time": 1493568072.0
+      }
+    },
+    {
+      "geometry": {
+        "coordinates": [
+          -82.69710402777778,
+          28.039163944444446,
+          0.588
+        ],
+        "type": "Point"
+      },
+      "properties": {
+        "filename": "DJI_0057.JPG",
+        "capture_time": 1493568074.0
+      }
+    },
+    {
+      "geometry": {
+        "coordinates": [
+          -82.69709763888889,
+          28.039056138888892,
+          0.588
+        ],
+        "type": "Point"
+      },
+      "properties": {
+        "filename": "DJI_0058.JPG",
+        "capture_time": 1493568076.0
+      }
+    },
+    {
+      "geometry": {
+        "coordinates": [
+          -82.69709447222223,
+          28.03891102777778,
+          0.388
+        ],
+        "type": "Point"
+      },
+      "properties": {
+        "filename": "DJI_0059.JPG",
+        "capture_time": 1493568078.0
+      }
+    },
+    {
+      "geometry": {
+        "coordinates": [
+          -82.69707891666667,
+          28.038842083333336,
+          0.388
+        ],
+        "type": "Point"
+      },
+      "properties": {
+        "filename": "DJI_0060.JPG",
+        "capture_time": 1493568080.0
+      }
+    },
+    {
+      "geometry": {
+        "coordinates": [
+          -82.697069,
+          28.038828194444445,
+          2.711
+        ],
+        "type": "Point"
+      },
+      "properties": {
+        "filename": "DJI_0061.JPG",
+        "capture_time": 1493568082.0
+      }
+    },
+    {
+      "geometry": {
+        "coordinates": [
+          -82.69701169444444,
+          28.038843916666668,
+          2.611
+        ],
+        "type": "Point"
+      },
+      "properties": {
+        "filename": "DJI_0062.JPG",
+        "capture_time": 1493568084.0
+      }
+    },
+    {
+      "geometry": {
+        "coordinates": [
+          -82.69687913888889,
+          28.03885316666667,
+          2.511
+        ],
+        "type": "Point"
+      },
+      "properties": {
+        "filename": "DJI_0063.JPG",
+        "capture_time": 1493568086.0
+      }
+    },
+    {
+      "geometry": {
+        "coordinates": [
+          -82.69672272222222,
+          28.038847555555556,
+          2.411
+        ],
+        "type": "Point"
+      },
+      "properties": {
+        "filename": "DJI_0064.JPG",
+        "capture_time": 1493568088.0
+      }
+    },
+    {
+      "geometry": {
+        "coordinates": [
+          -82.69656222222223,
+          28.03884216666667,
+          2.411
+        ],
+        "type": "Point"
+      },
+      "properties": {
+        "filename": "DJI_0065.JPG",
+        "capture_time": 1493568090.0
+      }
+    },
+    {
+      "geometry": {
+        "coordinates": [
+          -82.69638802777779,
+          28.038840055555557,
+          2.411
+        ],
+        "type": "Point"
+      },
+      "properties": {
+        "filename": "DJI_0066.JPG",
+        "capture_time": 1493568092.0
+      }
+    },
+    {
+      "geometry": {
+        "coordinates": [
+          -82.69620913888889,
+          28.03883941666667,
+          2.411
+        ],
+        "type": "Point"
+      },
+      "properties": {
+        "filename": "DJI_0067.JPG",
+        "capture_time": 1493568094.0
+      }
+    },
+    {
+      "geometry": {
+        "coordinates": [
+          -82.69609847222223,
+          28.038834555555557,
+          2.611
+        ],
+        "type": "Point"
+      },
+      "properties": {
+        "filename": "DJI_0068.JPG",
+        "capture_time": 1493568096.0
+      }
+    },
+    {
+      "geometry": {
+        "coordinates": [
+          -82.69610766666668,
+          28.038898444444445,
+          2.611
+        ],
+        "type": "Point"
+      },
+      "properties": {
+        "filename": "DJI_0069.JPG",
+        "capture_time": 1493568098.0
+      }
+    },
+    {
+      "geometry": {
+        "coordinates": [
+          -82.69613552777778,
+          28.03902927777778,
+          2.411
+        ],
+        "type": "Point"
+      },
+      "properties": {
+        "filename": "DJI_0070.JPG",
+        "capture_time": 1493568100.0
+      }
+    },
+    {
+      "geometry": {
+        "coordinates": [
+          -82.69615330555555,
+          28.039123222222223,
+          2.411
+        ],
+        "type": "Point"
+      },
+      "properties": {
+        "filename": "DJI_0071.JPG",
+        "capture_time": 1493568102.0
+      }
+    },
+    {
+      "geometry": {
+        "coordinates": [
+          -82.69623827777778,
+          28.03912602777778,
+          2.411
+        ],
+        "type": "Point"
+      },
+      "properties": {
+        "filename": "DJI_0072.JPG",
+        "capture_time": 1493568104.0
+      }
+    },
+    {
+      "geometry": {
+        "coordinates": [
+          -82.6964045,
+          28.039120972222225,
+          2.311
+        ],
+        "type": "Point"
+      },
+      "properties": {
+        "filename": "DJI_0073.JPG",
+        "capture_time": 1493568106.0
+      }
+    },
+    {
+      "geometry": {
+        "coordinates": [
+          -82.69662088888889,
+          28.039116972222224,
+          2.511
+        ],
+        "type": "Point"
+      },
+      "properties": {
+        "filename": "DJI_0074.JPG",
+        "capture_time": 1493568108.0
+      }
+    },
+    {
+      "geometry": {
+        "coordinates": [
+          -82.69684736111111,
+          28.03911616666667,
+          2.311
+        ],
+        "type": "Point"
+      },
+      "properties": {
+        "filename": "DJI_0075.JPG",
+        "capture_time": 1493568110.0
+      }
+    },
+    {
+      "geometry": {
+        "coordinates": [
+          -82.69702233333334,
+          28.03911341666667,
+          2.111
+        ],
+        "type": "Point"
+      },
+      "properties": {
+        "filename": "DJI_0076.JPG",
+        "capture_time": 1493568112.0
+      }
+    },
+    {
+      "geometry": {
+        "coordinates": [
+          -82.69707558333334,
+          28.039129083333336,
+          2.311
+        ],
+        "type": "Point"
+      },
+      "properties": {
+        "filename": "DJI_0077.JPG",
+        "capture_time": 1493568114.0
+      }
+    },
+    {
+      "geometry": {
+        "coordinates": [
+          -82.69705497222223,
+          28.039210972222225,
+          2.511
+        ],
+        "type": "Point"
+      },
+      "properties": {
+        "filename": "DJI_0078.JPG",
+        "capture_time": 1493568116.0
+      }
+    },
+    {
+      "geometry": {
+        "coordinates": [
+          -82.69700019444444,
+          28.03934775,
+          2.611
+        ],
+        "type": "Point"
+      },
+      "properties": {
+        "filename": "DJI_0079.JPG",
+        "capture_time": 1493568118.0
+      }
+    },
+    {
+      "geometry": {
+        "coordinates": [
+          -82.69695925,
+          28.03940805555556,
+          2.411
+        ],
+        "type": "Point"
+      },
+      "properties": {
+        "filename": "DJI_0080.JPG",
+        "capture_time": 1493568120.0
+      }
+    },
+    {
+      "geometry": {
+        "coordinates": [
+          -82.69689000000001,
+          28.039414833333336,
+          2.411
+        ],
+        "type": "Point"
+      },
+      "properties": {
+        "filename": "DJI_0081.JPG",
+        "capture_time": 1493568122.0
+      }
+    },
+    {
+      "geometry": {
+        "coordinates": [
+          -82.69679519444445,
+          28.039413972222224,
+          2.411
+        ],
+        "type": "Point"
+      },
+      "properties": {
+        "filename": "DJI_0082.JPG",
+        "capture_time": 1493568124.0
+      }
+    },
+    {
+      "geometry": {
+        "coordinates": [
+          -82.69668505555556,
+          28.039408361111114,
+          2.411
+        ],
+        "type": "Point"
+      },
+      "properties": {
+        "filename": "DJI_0083.JPG",
+        "capture_time": 1493568126.0
+      }
+    },
+    {
+      "geometry": {
+        "coordinates": [
+          -82.69655186111112,
+          28.039406777777778,
+          2.411
+        ],
+        "type": "Point"
+      },
+      "properties": {
+        "filename": "DJI_0084.JPG",
+        "capture_time": 1493568128.0
+      }
+    },
+    {
+      "geometry": {
+        "coordinates": [
+          -82.6964023888889,
+          28.039405138888892,
+          2.311
+        ],
+        "type": "Point"
+      },
+      "properties": {
+        "filename": "DJI_0085.JPG",
+        "capture_time": 1493568130.0
+      }
+    },
+    {
+      "geometry": {
+        "coordinates": [
+          -82.69624830555556,
+          28.03940502777778,
+          2.511
+        ],
+        "type": "Point"
+      },
+      "properties": {
+        "filename": "DJI_0086.JPG",
+        "capture_time": 1493568132.0
+      }
+    },
+    {
+      "geometry": {
+        "coordinates": [
+          -82.69619580555556,
+          28.03939725,
+          1.811
+        ],
+        "type": "Point"
+      },
+      "properties": {
+        "filename": "DJI_0087.JPG",
+        "capture_time": 1493568134.0
+      }
+    }
+  ],
+  "stats": {
+    "photos": 32,
+    "geotagged": 32,
+    "with_heading": 0,
+    "centre": {
+      "lat": 28.039109405381947,
+      "lon": -82.69668147569445
+    },
+    "bounds": {
+      "north": 28.039414833333336,
+      "south": 28.038828194444445,
+      "east": -82.69609847222223,
+      "west": -82.69710402777778
+    },
+    "extent_m": {
+      "width": 99,
+      "height": 65
+    },
+    "altitude": {
+      "min": 0.388,
+      "max": 2.711,
+      "mean": 2.12303125
+    },
+    "spacing_m": {
+      "min": 1.82751942730629,
+      "max": 22.251987816064155,
+      "median": 12.017320748272809
+    }
+  }
+}
