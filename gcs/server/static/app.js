@@ -748,6 +748,12 @@ function buildScene(canvas, object) {
   // thousands of units from the origin. Recentre it or the camera never finds
   // it. ODM is also Z-up while three.js is Y-up, hence the rotation.
   object.rotation.x = -Math.PI / 2;
+  object.traverse((child) => {
+    if (child.isMesh && child.material) {
+      const mats = Array.isArray(child.material) ? child.material : [child.material];
+      mats.forEach((m) => { m.side = THREE.DoubleSide; });
+    }
+  });
   object.updateMatrixWorld(true);
 
   const box = new THREE.Box3().setFromObject(object);
