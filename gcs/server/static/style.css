@@ -673,7 +673,7 @@ button.full { width: 100%; margin-top: 8px; }
 
 /* -- main --------------------------------------------------------------- */
 
-main { display: flex; flex-direction: column; min-width: 0; }
+main { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
 
 #tabs {
   display: flex;
