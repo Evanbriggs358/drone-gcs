@@ -152,6 +152,7 @@ const LAYERS = [
   {
     key: "ortho",
     label: "Orthomosaic",
+    demoRender: true,
     caption:
       "Every photo reprojected as though shot from directly overhead, then " +
       "stitched. Distances and areas measured on this are true to the ground.",
@@ -160,6 +161,7 @@ const LAYERS = [
     key: "elevation",
     label: "Elevation",
     legend: "elevation_legend",
+    demoRender: true,
     caption:
       "Digital surface model — the height of the ground and everything standing " +
       "on it. Colour runs low to high, so the tree canopy separates clearly from " +
@@ -301,11 +303,175 @@ function renderCoverageHeatmap(shots) {
   return canvas.toDataURL("image/png");
 }
 
+function terrainNoise(px, py) {
+  return (Math.sin(px * 0.8 + py * 0.6) + 1) * 0.2 +
+         (Math.sin(px * 2.1 - py * 1.7 + 3.0) + 1) * 0.15 +
+         (Math.sin(px * 5.3 + py * 4.1 + 7.0) + 1) * 0.1 +
+         (Math.sin(px * 11.0 - py * 9.5 + 1.5) + 1) * 0.05;
+}
+
+function renderDemoOrtho(shots) {
+  if (shots.length < 2) return null;
+  const coords = shots.map(s => ({ lat: s.geometry.coordinates[1], lon: s.geometry.coordinates[0] }));
+  const lats = coords.map(c => c.lat), lons = coords.map(c => c.lon);
+  const pad = 0.3;
+  const spanLat = (Math.max(...lats) - Math.min(...lats)) * (1 + pad) || 0.001;
+  const spanLon = (Math.max(...lons) - Math.min(...lons)) * (1 + pad) || 0.001;
+  const originLat = Math.min(...lats) - spanLat * pad / 2;
+  const originLon = Math.min(...lons) - spanLon * pad / 2;
+
+  const W = 800, H = 800;
+  const canvas = document.createElement("canvas");
+  canvas.width = W; canvas.height = H;
+  const ctx = canvas.getContext("2d");
+  const imageData = ctx.createImageData(W, H);
+  const d = imageData.data;
+
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      const px = x * 0.04, py = y * 0.04;
+      const zone = (Math.sin(px * 0.7 + py * 0.5 + 1) + Math.sin(px * 0.3 - py * 0.8 + 2)) * 0.5;
+      const detail = Math.sin(px * 5.7 + py * 3.3) * 0.1 + Math.sin(px * 11 - py * 8.5) * 0.05;
+      const v = zone + detail;
+      const i = (y * W + x) * 4;
+      if (v > 0.5) {
+        d[i] = 20 + (v - 0.5) * 50 + detail * 40;
+        d[i + 1] = 50 + (v - 0.5) * 60 + detail * 30;
+        d[i + 2] = 15 + (v - 0.5) * 20;
+      } else if (v > -0.2) {
+        const t = (v + 0.2) / 0.7;
+        d[i] = 65 + 40 * t + detail * 50;
+        d[i + 1] = 115 + 30 * t + detail * 40;
+        d[i + 2] = 40 + 20 * t;
+      } else {
+        d[i] = 155 + detail * 30;
+        d[i + 1] = 148 + detail * 25;
+        d[i + 2] = 130 + detail * 20;
+      }
+      d[i + 3] = 255;
+    }
+  }
+  ctx.putImageData(imageData, 0, 0);
+
+  ctx.strokeStyle = "rgba(255,255,255,0.06)";
+  ctx.lineWidth = 0.5;
+  for (let i = 0; i < 8; i++) {
+    const lx = W * (i + 1) / 9;
+    ctx.beginPath(); ctx.moveTo(lx, 0); ctx.lineTo(lx, H); ctx.stroke();
+  }
+  for (let j = 0; j < 14; j++) {
+    const ly = H * (j + 1) / 15;
+    ctx.beginPath(); ctx.moveTo(0, ly); ctx.lineTo(W, ly); ctx.stroke();
+  }
+
+  ctx.fillStyle = "rgba(255,100,100,0.6)";
+  for (const c of coords) {
+    const cx = ((c.lon - originLon) / spanLon) * W;
+    const cy = (1 - (c.lat - originLat) / spanLat) * H;
+    ctx.beginPath(); ctx.arc(cx, cy, 2, 0, Math.PI * 2); ctx.fill();
+  }
+
+  ctx.fillStyle = "rgba(0,0,0,0.5)";
+  ctx.fillRect(10, H - 30, 200, 22);
+  ctx.fillStyle = "#e6edf3";
+  ctx.font = "11px sans-serif";
+  ctx.fillText("Simulated orthomosaic (demo)", 16, H - 14);
+  return canvas.toDataURL("image/png");
+}
+
+function renderDemoElevation(shots) {
+  if (shots.length < 2) return null;
+  const W = 800, H = 800;
+  const canvas = document.createElement("canvas");
+  canvas.width = W; canvas.height = H;
+  const ctx = canvas.getContext("2d");
+  const imageData = ctx.createImageData(W, H);
+  const d = imageData.data;
+
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      const px = x * 0.04, py = y * 0.04;
+      const n = terrainNoise(px, py);
+      const i = (y * W + x) * 4;
+      if (n < 0.3) {
+        const t = n / 0.3;
+        d[i] = Math.round(30 * t);
+        d[i + 1] = Math.round(50 + 100 * t);
+        d[i + 2] = Math.round(150 + 50 * t);
+      } else if (n < 0.6) {
+        const t = (n - 0.3) / 0.3;
+        d[i] = Math.round(30 + 180 * t);
+        d[i + 1] = Math.round(150 + 55 * t);
+        d[i + 2] = Math.round(200 - 165 * t);
+      } else {
+        const t = (n - 0.6) / 0.4;
+        d[i] = Math.round(210 + 45 * t);
+        d[i + 1] = Math.round(205 - 85 * t);
+        d[i + 2] = Math.round(35 + 45 * t);
+      }
+      d[i + 3] = 255;
+    }
+  }
+  ctx.putImageData(imageData, 0, 0);
+
+  const lx = W - 230, ly = H - 50;
+  ctx.fillStyle = "rgba(0,0,0,0.6)";
+  ctx.fillRect(lx - 6, ly - 22, 222, 46);
+  ctx.fillStyle = "#e6edf3";
+  ctx.font = "bold 11px sans-serif";
+  ctx.fillText("Elevation", lx, ly - 8);
+  const grad = ctx.createLinearGradient(lx, 0, lx + 200, 0);
+  grad.addColorStop(0, "rgb(0,50,150)");
+  grad.addColorStop(0.3, "rgb(30,150,200)");
+  grad.addColorStop(0.5, "rgb(100,200,40)");
+  grad.addColorStop(0.7, "rgb(210,205,35)");
+  grad.addColorStop(1, "rgb(255,120,80)");
+  ctx.fillStyle = grad;
+  ctx.fillRect(lx, ly, 200, 16);
+  ctx.fillStyle = "#e6edf3";
+  ctx.font = "10px sans-serif";
+  ctx.textAlign = "left";
+  ctx.fillText("Low", lx, ly + 16 + 12);
+  ctx.textAlign = "right";
+  ctx.fillText("High", lx + 200, ly + 16 + 12);
+  ctx.textAlign = "left";
+  return canvas.toDataURL("image/png");
+}
+
+function buildDemoTerrain() {
+  const size = 120, segs = 100;
+  const geometry = new THREE.PlaneGeometry(size, size, segs, segs);
+  const pos = geometry.attributes.position;
+  const colors = new Float32Array(pos.count * 3);
+  for (let i = 0; i < pos.count; i++) {
+    const x = pos.getX(i), y = pos.getY(i);
+    const px = (x / size + 0.5) * 20, py = (y / size + 0.5) * 20;
+    const n = terrainNoise(px, py);
+    pos.setZ(i, n * 15);
+    if (n < 0.3) {
+      colors[i * 3] = 0.5; colors[i * 3 + 1] = 0.55; colors[i * 3 + 2] = 0.4;
+    } else if (n < 0.6) {
+      colors[i * 3] = 0.2 + n * 0.3;
+      colors[i * 3 + 1] = 0.4 + n * 0.3;
+      colors[i * 3 + 2] = 0.1 + n * 0.1;
+    } else {
+      colors[i * 3] = 0.1 + n * 0.15;
+      colors[i * 3 + 1] = 0.25 + n * 0.15;
+      colors[i * 3 + 2] = 0.05 + n * 0.1;
+    }
+  }
+  geometry.setAttribute("color", new THREE.BufferAttribute(colors, 3));
+  geometry.computeVertexNormals();
+  return new THREE.Mesh(geometry, new THREE.MeshStandardMaterial({ vertexColors: true, side: THREE.DoubleSide }));
+}
+
 function showMaps(project) {
   const bar = document.getElementById("layer-bar");
   const buttons = document.getElementById("layer-buttons");
   const available = LAYERS.filter((layer) =>
-    layer.computed ? replay.shots.length > 0 : project.layers[layer.key]
+    layer.computed ? replay.shots.length > 0
+    : state.demo && layer.demoRender ? replay.shots.length > 0
+    : project.layers[layer.key]
   );
 
   buttons.innerHTML = "";
@@ -366,6 +532,21 @@ function setLayer(project, layer) {
       img.src = dataUrl;
     } else {
       status.textContent = "Not enough data to compute coverage";
+    }
+    return;
+  }
+
+  if (state.demo && layer.demoRender) {
+    status.classList.remove("hidden");
+    status.textContent = `Generating ${layer.label.toLowerCase()}…`;
+    frame.classList.remove("ready");
+    const dataUrl = layer.key === "ortho" ? renderDemoOrtho(replay.shots) : renderDemoElevation(replay.shots);
+    if (dataUrl) {
+      img.onload = () => { status.classList.add("hidden"); frame.classList.add("ready"); };
+      img.onerror = () => { status.textContent = `${layer.label} render failed`; };
+      img.src = dataUrl;
+    } else {
+      status.textContent = "Not enough data to render";
     }
     return;
   }
@@ -497,6 +678,14 @@ function showModel(project) {
   status.classList.remove("hidden");
 
   if (!model) {
+    if (state.demo) {
+      const terrain = buildDemoTerrain();
+      status.classList.add("hidden");
+      canvas.classList.add("ready");
+      hint.classList.remove("hidden");
+      state.scene = buildScene(canvas, terrain);
+      return;
+    }
     status.textContent = "No 3D model in this reconstruction";
     return;
   }
