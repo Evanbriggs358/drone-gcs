@@ -1,4 +1,16 @@
-newmtl terrain
-Ka 1.0 1.0 1.0
-Kd 1.0 1.0 1.0
-map_Kd model_texture.jpg
+newmtl material_00
+Ka 1.000000 1.000000 1.000000
+Kd 1 1 1
+Ks 0.000000 0.000000 0.000000
+d 1.000000
+illum 1
+Ns 1.000000
+map_Kd model_texture_0.jpg
+newmtl material_01
+Ka 1.000000 1.000000 1.000000
+Kd 1 1 1
+Ks 0.000000 0.000000 0.000000
+d 1.000000
+illum 1
+Ns 1.000000
+map_Kd model_texture_1.jpg

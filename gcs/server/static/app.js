@@ -740,6 +740,8 @@ function showModel(project) {
 function buildScene(canvas, object) {
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
   renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  renderer.toneMapping = THREE.NoToneMapping;
 
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x0e1116);
@@ -750,8 +752,17 @@ function buildScene(canvas, object) {
   object.rotation.x = -Math.PI / 2;
   object.traverse((child) => {
     if (child.isMesh && child.material) {
-      const mats = Array.isArray(child.material) ? child.material : [child.material];
-      mats.forEach((m) => { m.side = THREE.DoubleSide; });
+      const swap = (m) => {
+        if (m.map) {
+          m.map.colorSpace = THREE.SRGBColorSpace;
+          m.map.flipY = false;
+          m.map.needsUpdate = true;
+          return new THREE.MeshBasicMaterial({ map: m.map, side: THREE.DoubleSide });
+        }
+        m.side = THREE.DoubleSide;
+        return m;
+      };
+      child.material = Array.isArray(child.material) ? child.material.map(swap) : swap(child.material);
     }
   });
   object.updateMatrixWorld(true);
