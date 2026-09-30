@@ -12,6 +12,7 @@ flights/
 *.laz
 *.ply
 *.obj
+!gcs/server/static/demo/model.obj
 
 .vscode/
 .idea/

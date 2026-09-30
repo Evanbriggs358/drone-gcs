@@ -90,9 +90,14 @@ async function loadProjects() {
     if (!resp.ok) throw new Error(resp.status);
     projects = await resp.json();
   } catch (err) {
-    const demo = buildDemoData();
-    state.demo = demo;
-    projects = [demo.project];
+    try {
+      const demoResp = await fetch("demo/flight_data.json");
+      const demoData = await demoResp.json();
+      state.demo = demoData;
+      projects = [demoData.project];
+    } catch {
+      projects = [];
+    }
   }
 
   if (!projects.length) {
@@ -538,16 +543,11 @@ function setLayer(project, layer) {
 
   if (state.demo && layer.demoRender) {
     status.classList.remove("hidden");
-    status.textContent = `Generating ${layer.label.toLowerCase()}…`;
+    status.textContent = `Loading ${layer.label.toLowerCase()}…`;
     frame.classList.remove("ready");
-    const dataUrl = layer.key === "ortho" ? renderDemoOrtho(replay.shots) : renderDemoElevation(replay.shots);
-    if (dataUrl) {
-      img.onload = () => { status.classList.add("hidden"); frame.classList.add("ready"); };
-      img.onerror = () => { status.textContent = `${layer.label} render failed`; };
-      img.src = dataUrl;
-    } else {
-      status.textContent = "Not enough data to render";
-    }
+    img.onload = () => { status.classList.add("hidden"); frame.classList.add("ready"); };
+    img.onerror = () => { status.textContent = `${layer.label} failed to load`; };
+    img.src = layer.key === "ortho" ? "demo/orthomosaic.jpg" : "demo/elevation.jpg";
     return;
   }
 
@@ -679,11 +679,21 @@ function showModel(project) {
 
   if (!model) {
     if (state.demo) {
-      const terrain = buildDemoTerrain();
-      status.classList.add("hidden");
-      canvas.classList.add("ready");
-      hint.classList.remove("hidden");
-      state.scene = buildScene(canvas, terrain);
+      status.innerHTML = `Loading 3D model&hellip;<div class="bar"><div id="model-bar"></div></div>`;
+      const onProgress = (event) => {
+        if (!event.lengthComputable) return;
+        const bar = document.getElementById("model-bar");
+        if (bar) bar.style.width = `${(event.loaded / event.total) * 100}%`;
+      };
+      new MTLLoader().setPath("demo/").load("model.mtl", (materials) => {
+        materials.preload();
+        new OBJLoader().setMaterials(materials).setPath("demo/").load("model.obj", (object) => {
+          status.classList.add("hidden");
+          canvas.classList.add("ready");
+          hint.classList.remove("hidden");
+          state.scene = buildScene(canvas, object);
+        }, onProgress, () => { status.textContent = "3D model failed to load"; });
+      }, undefined, () => { status.textContent = "Material file failed to load"; });
       return;
     }
     status.textContent = "No 3D model in this reconstruction";
@@ -1119,7 +1129,7 @@ function buildReplayMap() {
 
   buildReplayGraphs(shots);
 
-  if (!state.demo) document.getElementById("replay-pip").classList.remove("hidden");
+  document.getElementById("replay-pip").classList.remove("hidden");
   updateReplayPosition(0);
 }
 
@@ -1201,9 +1211,10 @@ function updateReplayPosition(index) {
   if (idx !== replay.lastPhotoIdx) {
     replay.lastPhotoIdx = idx;
     const filename = shot.properties.filename;
-    if (filename && state.project && !state.demo) {
-      document.getElementById("replay-photo").src =
-        `/files/${state.project.name}/images/${filename}`;
+    if (filename && state.project) {
+      document.getElementById("replay-photo").src = state.demo
+        ? `demo/images/${filename}`
+        : `/files/${state.project.name}/images/${filename}`;
     }
   }
 
